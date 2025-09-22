@@ -1,3 +1,15 @@
+## [0.1.0] - 2025-09-22
+
+- feat: first commit
+- ci: add GitHub Actions workflows for CI/CD including build, release, and PR checks
+- chore: update GolangCI-Lint configuration to simplify settings and enable additional linters
+- style: remove unnecessary whitespace in multiple files for cleaner code
+- fix: correct 'grun' to 'run' in GolangCI-Lint configuration
+- fix: enhance changelog generation logic for first and subsequent releases
+- ci: update GitHub Actions permissions for pull request workflows
+- ci: update GitHub Actions release workflow with additional permissions and credential persistence
+- ci: add write permissions for contents and read permissions for actions in GitHub Actions workflow
+
 # Changelog
 
 All notable changes to cherry-go will be documented in this file.

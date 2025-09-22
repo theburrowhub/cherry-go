@@ -9,7 +9,7 @@ import (
 
 var (
 	// Version will be set during build
-	Version = "dev"
+	Version = "0.1.0"
 	// CommitHash will be set during build
 	CommitHash = "unknown"
 	// BuildTime will be set during build
