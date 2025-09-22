@@ -37,18 +37,18 @@ Examples:
 				if localPathDisplay == "" {
 					localPathDisplay = path.Include // Default: same as source path
 				}
-				
+
 				branchDisplay := path.Branch
 				if branchDisplay == "" {
 					branchDisplay = "(default)"
 				}
-				
+
 				logger.Info("    %d. %s -> %s [%s]", j+1, path.Include, localPathDisplay, branchDisplay)
-				
+
 				if len(path.Exclude) > 0 {
 					logger.Info("       Excludes: %v", path.Exclude)
 				}
-				
+
 				if len(path.Files) > 0 {
 					logger.Info("       Tracked files: %d", len(path.Files))
 				}

@@ -20,14 +20,14 @@ func NewManager() (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	
+
 	cacheDir := filepath.Join(homeDir, ".cache", "cherry-go", "repos")
-	
+
 	// Ensure cache directory exists
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
-	
+
 	return &Manager{
 		cacheDir: cacheDir,
 	}, nil
@@ -43,10 +43,10 @@ func (m *Manager) GetRepositoryPath(repoURL string) string {
 	// Create a safe directory name from the repository URL
 	repoHash := m.hashRepositoryURL(repoURL)
 	repoName := m.extractRepositoryName(repoURL)
-	
+
 	// Combine name and hash for uniqueness
 	dirName := fmt.Sprintf("%s-%s", repoName, repoHash[:8])
-	
+
 	return filepath.Join(m.cacheDir, dirName)
 }
 
@@ -71,20 +71,20 @@ func (m *Manager) extractRepositoryName(repoURL string) string {
 		name = strings.TrimPrefix(name, "git@")
 		name = strings.Replace(name, ":", "/", 1)
 	}
-	
+
 	// Remove .git suffix
 	name = strings.TrimSuffix(name, ".git")
-	
+
 	// Replace special characters with dashes
 	name = strings.ReplaceAll(name, "/", "-")
 	name = strings.ReplaceAll(name, ":", "-")
 	name = strings.ReplaceAll(name, ".", "-")
-	
+
 	// Limit length
 	if len(name) > 50 {
 		name = name[:50]
 	}
-	
+
 	return name
 }
 
@@ -92,7 +92,7 @@ func (m *Manager) extractRepositoryName(repoURL string) string {
 func (m *Manager) RepositoryExists(repoURL string) bool {
 	repoPath := m.GetRepositoryPath(repoURL)
 	gitDir := filepath.Join(repoPath, ".git")
-	
+
 	_, err := os.Stat(gitDir)
 	return err == nil
 }
@@ -106,24 +106,24 @@ func (m *Manager) ListCachedRepositories() ([]CachedRepository, error) {
 		}
 		return nil, fmt.Errorf("failed to read cache directory: %w", err)
 	}
-	
+
 	var repos []CachedRepository
-	
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		
+
 		repoPath := filepath.Join(m.cacheDir, entry.Name())
 		gitDir := filepath.Join(repoPath, ".git")
-		
+
 		// Check if it's a valid git repository
 		if _, err := os.Stat(gitDir); err == nil {
 			info, err := entry.Info()
 			if err != nil {
 				continue
 			}
-			
+
 			repos = append(repos, CachedRepository{
 				Name:         entry.Name(),
 				Path:         repoPath,
@@ -131,7 +131,7 @@ func (m *Manager) ListCachedRepositories() ([]CachedRepository, error) {
 			})
 		}
 	}
-	
+
 	return repos, nil
 }
 
@@ -141,27 +141,27 @@ func (m *Manager) CleanCache(maxAge int64) error {
 	if err != nil {
 		return err
 	}
-	
+
 	currentTime := time.Now().Unix()
-	
+
 	for _, repo := range repos {
 		// Check if repository is older than maxAge days
 		daysSinceModified := repo.LastModified.Unix()
-		
+
 		if (currentTime - daysSinceModified) > (maxAge * 24 * 60 * 60) {
 			if err := os.RemoveAll(repo.Path); err != nil {
 				return fmt.Errorf("failed to remove cached repository %s: %w", repo.Name, err)
 			}
 		}
 	}
-	
+
 	return nil
 }
 
 // GetCacheSize returns the total size of the cache directory
 func (m *Manager) GetCacheSize() (int64, error) {
 	var size int64
-	
+
 	err := filepath.Walk(m.cacheDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -171,7 +171,7 @@ func (m *Manager) GetCacheSize() (int64, error) {
 		}
 		return nil
 	})
-	
+
 	return size, err
 }
 

@@ -164,11 +164,11 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 		result.Error = fmt.Errorf("failed to copy paths: %w", err)
 		return result
 	}
-	
+
 	result.UpdatedPaths = updatedPaths
 	result.Conflicts = conflicts
 	result.HasChanges = len(updatedPaths) > 0
-	
+
 	// Handle conflicts
 	if len(conflicts) > 0 && !forceSync {
 		logger.Error("Sync aborted due to conflicts. Use --force to override or resolve manually.")
@@ -187,7 +187,7 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 				break
 			}
 		}
-		
+
 		// Save configuration
 		if err := cfg.Save(configFile); err != nil {
 			logger.Error("Failed to save updated configuration: %v", err)
@@ -198,23 +198,23 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 
 	// Create commit if auto-commit is enabled and there are changes
 	if cfg.Options.AutoCommit && result.HasChanges && !logger.IsDryRun() {
-		commitMessage := fmt.Sprintf("%s %s from %s (%s)", 
-			cfg.Options.CommitPrefix, 
-			source.Name, 
-			source.Repository, 
+		commitMessage := fmt.Sprintf("%s %s from %s (%s)",
+			cfg.Options.CommitPrefix,
+			source.Name,
+			source.Repository,
 			commitHash[:8])
-		
+
 		if err := git.CreateCommit(workDir, commitMessage, updatedPaths); err != nil {
 			logger.Error("Failed to create commit: %v", err)
 		}
 	}
-	
+
 	return result
 }
 
 func init() {
 	rootCmd.AddCommand(syncCmd)
-	
+
 	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all configured sources")
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
 }

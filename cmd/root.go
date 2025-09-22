@@ -80,7 +80,7 @@ func initConfig() {
 		viper.AddConfigPath(cwd)
 		viper.SetConfigType("yaml")
 		viper.SetConfigName(".cherry-go")
-		
+
 		// Set default config file path to current directory
 		configFile = filepath.Join(cwd, ".cherry-go.yaml")
 	}

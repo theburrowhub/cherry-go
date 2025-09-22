@@ -91,7 +91,7 @@ Examples:
 		logger.Info("Next steps:")
 		logger.Info("  Add files: cherry-go add file %s/path/to/file.ext", repoURL)
 		logger.Info("  Add directories: cherry-go add directory %s/path/to/dir/", repoURL)
-		
+
 		if logger.IsDryRun() {
 			logger.DryRunInfo("Configuration would be saved to: %s", configFile)
 		} else {
@@ -106,13 +106,13 @@ func detectAuthType(repoURL string) string {
 	if strings.HasPrefix(repoURL, "git@") {
 		return "ssh"
 	}
-	
+
 	parsedURL, err := url.Parse(repoURL)
 	if err != nil {
 		logger.Debug("Failed to parse URL, defaulting to auto: %v", err)
 		return "auto"
 	}
-	
+
 	switch {
 	case parsedURL.Scheme == "ssh":
 		return "ssh"

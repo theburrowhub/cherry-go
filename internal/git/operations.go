@@ -44,12 +44,12 @@ func NewRepository(source *config.Source) (*Repository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize cache manager: %w", err)
 	}
-	
+
 	// Get repository path in cache
 	repoPath := cacheManager.GetRepositoryPath(source.Repository)
-	
+
 	var repo *git.Repository
-	
+
 	// Check if repository already exists in cache
 	if cacheManager.RepositoryExists(source.Repository) {
 		logger.Debug("Using cached repository: %s", repoPath)
@@ -65,7 +65,7 @@ func NewRepository(source *config.Source) (*Repository, error) {
 			return nil, fmt.Errorf("failed to clone repository: %w", err)
 		}
 	}
-	
+
 	return &Repository{
 		repo:   repo,
 		path:   repoPath,
@@ -79,19 +79,19 @@ func cloneRepository(source *config.Source, repoPath string) (*git.Repository, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to get authentication: %w", err)
 	}
-	
+
 	cloneOptions := &git.CloneOptions{
 		URL:  source.Repository,
 		Auth: auth,
 		// Don't specify SingleBranch or ReferenceName to get all branches
 		// This allows us to checkout any branch/tag later
 	}
-	
+
 	if logger.IsDryRun() {
 		logger.DryRunInfo("Would clone repository %s to %s", source.Repository, repoPath)
 		return nil, nil
 	}
-	
+
 	return git.PlainClone(repoPath, false, cloneOptions)
 }
 
@@ -104,7 +104,7 @@ func getAuth(authConfig config.AuthConfig, repoURL string) (transport.AuthMethod
 			return getSSHAuth(authConfig.SSHKey)
 		}
 	}
-	
+
 	// Parse repository URL to determine protocol for HTTPS URLs
 	parsedURL, err := url.Parse(repoURL)
 	if err != nil {
@@ -115,19 +115,19 @@ func getAuth(authConfig config.AuthConfig, repoURL string) (transport.AuthMethod
 		}
 		return nil, fmt.Errorf("failed to parse repository URL: %w", err)
 	}
-	
+
 	// Auto-detect authentication method if not specified
 	if authConfig.Type == "" || authConfig.Type == "auto" {
 		return getAutoAuth(parsedURL)
 	}
-	
+
 	switch authConfig.Type {
 	case "ssh":
 		return getSSHAuth(authConfig.SSHKey)
-		
+
 	case "basic":
 		return getBasicAuth(authConfig.Username)
-		
+
 	default:
 		return nil, nil // No authentication
 	}
@@ -140,7 +140,7 @@ func getAutoAuth(parsedURL *url.URL) (transport.AuthMethod, error) {
 		// For SSH URLs, use SSH authentication
 		logger.Debug("Auto-detecting SSH authentication for %s", parsedURL.Host)
 		return getSSHAuth("")
-		
+
 	case parsedURL.Scheme == "https":
 		// For HTTPS URLs, try token from environment first
 		logger.Debug("Auto-detecting HTTPS authentication for %s", parsedURL.Host)
@@ -148,11 +148,11 @@ func getAutoAuth(parsedURL *url.URL) (transport.AuthMethod, error) {
 		if err == nil && auth != nil {
 			return auth, nil
 		}
-		
+
 		// If no environment auth found, try without authentication for public repos
 		logger.Debug("No HTTPS authentication found, trying without auth for public repository")
 		return nil, nil
-		
+
 	default:
 		logger.Debug("No authentication method auto-detected for %s", parsedURL.String())
 		return nil, nil
@@ -170,7 +170,7 @@ func getSSHAuth(keyPath string) (transport.AuthMethod, error) {
 		}
 		return publicKeys, nil
 	}
-	
+
 	// Try to use SSH agent
 	logger.Debug("Using SSH agent authentication")
 	sshAuth, err := ssh.NewSSHAgentAuth("git")
@@ -181,7 +181,7 @@ func getSSHAuth(keyPath string) (transport.AuthMethod, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}
-		
+
 		defaultKeyPath := filepath.Join(homeDir, ".ssh", "id_rsa")
 		if _, err := os.Stat(defaultKeyPath); err == nil {
 			logger.Debug("Falling back to default SSH key: %s", defaultKeyPath)
@@ -191,10 +191,10 @@ func getSSHAuth(keyPath string) (transport.AuthMethod, error) {
 			}
 			return publicKeys, nil
 		}
-		
+
 		return nil, fmt.Errorf("no SSH authentication method available")
 	}
-	
+
 	return sshAuth, nil
 }
 
@@ -208,7 +208,7 @@ func getHTTPSAuth() (transport.AuthMethod, error) {
 			Password: token,
 		}, nil
 	}
-	
+
 	// Try GitLab token from environment
 	if token := os.Getenv("GITLAB_TOKEN"); token != "" {
 		logger.Debug("Using GitLab token from environment")
@@ -217,7 +217,7 @@ func getHTTPSAuth() (transport.AuthMethod, error) {
 			Password: token,
 		}, nil
 	}
-	
+
 	// Try generic Git token from environment
 	if token := os.Getenv("GIT_TOKEN"); token != "" {
 		logger.Debug("Using generic Git token from environment")
@@ -226,7 +226,7 @@ func getHTTPSAuth() (transport.AuthMethod, error) {
 			Password: token,
 		}, nil
 	}
-	
+
 	// Try Git credentials from environment
 	if username := os.Getenv("GIT_USERNAME"); username != "" {
 		if password := os.Getenv("GIT_PASSWORD"); password != "" {
@@ -237,7 +237,7 @@ func getHTTPSAuth() (transport.AuthMethod, error) {
 			}, nil
 		}
 	}
-	
+
 	logger.Debug("No HTTPS authentication found in environment variables")
 	return nil, nil
 }
@@ -250,12 +250,12 @@ func getBasicAuth(username string) (transport.AuthMethod, error) {
 			return nil, fmt.Errorf("username is required for basic authentication")
 		}
 	}
-	
+
 	password := os.Getenv("GIT_PASSWORD")
 	if password == "" {
 		return nil, fmt.Errorf("password is required for basic authentication (set GIT_PASSWORD environment variable)")
 	}
-	
+
 	logger.Debug("Using basic authentication for user: %s", username)
 	return &http.BasicAuth{
 		Username: username,
@@ -307,7 +307,7 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 	var updatedPaths []string
 	var allConflicts []hash.FileConflict
 	hasher := hash.NewFileHasher()
-	
+
 	for i, pathSpec := range r.source.Paths {
 		// Checkout the specific branch/tag for this path
 		if err := r.checkoutBranch(pathSpec.Branch); err != nil {
@@ -319,15 +319,15 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 		if localPath == "" {
 			localPath = pathSpec.Include
 		}
-		
+
 		sourcePath := filepath.Join(r.path, pathSpec.Include)
-		
+
 		// Check if source path exists
 		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
 			logger.Error("Source path does not exist: %s", sourcePath)
 			continue
 		}
-		
+
 		// For directories, we need to check conflicts in the target directory
 		// For files, we check the specific file location
 		var conflictCheckPath string
@@ -336,13 +336,13 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 			logger.Error("Failed to stat source path %s: %v", sourcePath, err)
 			continue
 		}
-		
+
 		if srcInfo.IsDir() {
 			conflictCheckPath = localPath
 		} else {
 			conflictCheckPath = filepath.Dir(localPath)
 		}
-		
+
 		// Check for conflicts with existing files
 		if pathSpec.Files != nil && len(pathSpec.Files) > 0 {
 			conflicts, err := hasher.VerifyFileIntegrity(conflictCheckPath, pathSpec.Files)
@@ -354,7 +354,7 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 					logger.Error("  - %s", conflict.String())
 					allConflicts = append(allConflicts, conflict)
 				}
-				
+
 				if !force && !logger.IsDryRun() {
 					logger.Error("Skipping %s due to conflicts. Use --force to override or resolve conflicts manually.", pathSpec.Include)
 					continue
@@ -363,16 +363,16 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 				}
 			}
 		}
-		
+
 		// Copy files/directories
 		if err := copyPath(sourcePath, localPath, pathSpec.Exclude); err != nil {
 			logger.Error("Failed to copy %s: %v", pathSpec.Include, err)
 			continue
 		}
-		
+
 		// Calculate new hashes for tracking
 		var newHashes map[string]string
-		
+
 		if srcInfo.IsDir() {
 			newHashes, err = hasher.HashDirectory(sourcePath, pathSpec.Exclude)
 		} else {
@@ -385,7 +385,7 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 				err = hashErr
 			}
 		}
-		
+
 		if err != nil {
 			logger.Error("Failed to calculate hashes for %s: %v", pathSpec.Include, err)
 		} else {
@@ -393,11 +393,11 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 			r.source.Paths[i].Files = newHashes
 			logger.Debug("Updated hashes for %s: %d files tracked", pathSpec.Include, len(newHashes))
 		}
-		
+
 		updatedPaths = append(updatedPaths, pathSpec.Include)
 		logger.Info("Copied %s to %s", pathSpec.Include, localPath)
 	}
-	
+
 	return updatedPaths, allConflicts, nil
 }
 
@@ -407,47 +407,47 @@ func (r *Repository) checkoutBranch(branch string) error {
 		// Try to detect default branch
 		branch = r.detectDefaultBranch()
 	}
-	
+
 	if logger.IsDryRun() {
 		logger.DryRunInfo("Would checkout branch/tag: %s", branch)
 		return nil
 	}
-	
+
 	workTree, err := r.repo.Worktree()
 	if err != nil {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
-	
+
 	// Try to checkout as branch first
 	branchRef := plumbing.ReferenceName("refs/heads/" + branch)
 	err = workTree.Checkout(&git.CheckoutOptions{
 		Branch: branchRef,
 	})
-	
+
 	if err != nil {
 		// If branch checkout fails, try as tag
 		tagRef := plumbing.ReferenceName("refs/tags/" + branch)
 		err = workTree.Checkout(&git.CheckoutOptions{
 			Branch: tagRef,
 		})
-		
+
 		if err != nil {
 			// If both fail, try to resolve as a commit hash
 			hash := plumbing.NewHash(branch)
 			if hash.IsZero() {
 				return fmt.Errorf("failed to checkout '%s': not a valid branch, tag, or commit", branch)
 			}
-			
+
 			err = workTree.Checkout(&git.CheckoutOptions{
 				Hash: hash,
 			})
-			
+
 			if err != nil {
 				return fmt.Errorf("failed to checkout '%s': %w", branch, err)
 			}
 		}
 	}
-	
+
 	logger.Debug("Checked out branch/tag: %s", branch)
 	return nil
 }
@@ -456,7 +456,7 @@ func (r *Repository) checkoutBranch(branch string) error {
 func (r *Repository) detectDefaultBranch() string {
 	// Try common default branch names
 	defaultBranches := []string{"main", "master", "develop", "dev"}
-	
+
 	for _, branch := range defaultBranches {
 		branchRef := plumbing.ReferenceName("refs/heads/" + branch)
 		_, err := r.repo.Reference(branchRef, true)
@@ -465,7 +465,7 @@ func (r *Repository) detectDefaultBranch() string {
 			return branch
 		}
 	}
-	
+
 	// If no common branch found, try to get HEAD reference
 	head, err := r.repo.Head()
 	if err == nil {
@@ -473,7 +473,7 @@ func (r *Repository) detectDefaultBranch() string {
 		logger.Debug("Using HEAD branch: %s", branchName)
 		return branchName
 	}
-	
+
 	// Final fallback
 	logger.Debug("Could not detect default branch, using 'main'")
 	return "main"

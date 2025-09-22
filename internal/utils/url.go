@@ -19,16 +19,16 @@ func ExtractRepoName(repoURL string) string {
 		// Convert git@host:owner/repo.git to host/owner/repo.git
 		url = strings.Replace(url, ":", "/", 1)
 	}
-	
+
 	// Remove .git suffix
 	url = strings.TrimSuffix(url, ".git")
-	
+
 	// Split by / and get the last part (repository name)
 	parts := strings.Split(url, "/")
 	if len(parts) > 0 {
 		return parts[len(parts)-1]
 	}
-	
+
 	return "repo"
 }
 
@@ -44,12 +44,12 @@ func ParseURLPath(urlPath string) (repoURL string, filePath string) {
 				return parts[0] + ".git", parts[1]
 			}
 		}
-		
+
 		// Handle URLs ending with .git but no path after
 		if strings.HasSuffix(urlPath, ".git") {
 			return urlPath, ""
 		}
-		
+
 		// For URLs without .git in the middle, try to find the path separator
 		if strings.HasPrefix(urlPath, "git@") {
 			// Format: git@host:owner/repo/path/to/file
@@ -58,7 +58,7 @@ func ParseURLPath(urlPath string) (repoURL string, filePath string) {
 				afterColon := urlPath[colonIndex+1:]
 				slashCount := 0
 				var repoEnd int
-				
+
 				for i, char := range afterColon {
 					if char == '/' {
 						slashCount++
@@ -68,7 +68,7 @@ func ParseURLPath(urlPath string) (repoURL string, filePath string) {
 						}
 					}
 				}
-				
+
 				if repoEnd > 0 && repoEnd < len(urlPath)-1 {
 					// Add .git if not present
 					repoURL = urlPath[:repoEnd]
@@ -92,11 +92,11 @@ func ParseURLPath(urlPath string) (repoURL string, filePath string) {
 				return repoURL, filePath
 			}
 		}
-		
+
 		// If we can't parse the path, assume the whole thing is a repository URL
 		return urlPath, ""
 	}
-	
+
 	// If no URL detected, assume it's just a file path
 	return "", urlPath
 }

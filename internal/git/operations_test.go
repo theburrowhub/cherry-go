@@ -32,21 +32,21 @@ func TestShouldExclude(t *testing.T) {
 
 func TestGetAuth(t *testing.T) {
 	logger.Init() // Initialize logger for tests
-	
+
 	// Test auto auth with HTTPS URL (should return nil if no env vars set)
 	_, err := getAuth(config.AuthConfig{Type: "auto"}, "https://github.com/user/repo.git")
 	if err != nil {
 		t.Errorf("Expected no error for auto auth, got %v", err)
 	}
 	// Auth might be nil if no environment variables are set, which is fine
-	
+
 	// Test auto auth with SSH URL (should try SSH agent)
 	_, err = getAuth(config.AuthConfig{Type: "auto"}, "git@github.com:user/repo.git")
 	// This might fail if SSH agent is not available, which is expected in test environment
 	if err != nil {
 		t.Logf("SSH auth failed (expected in test environment): %v", err)
 	}
-	
+
 	// Test basic auth without environment variables (should fail)
 	basicConfig := config.AuthConfig{
 		Type:     "basic",

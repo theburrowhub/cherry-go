@@ -99,14 +99,14 @@ By default, repositories older than 30 days are removed.`,
 		}
 
 		maxAge := int64(30) // 30 days default
-		
+
 		if logger.IsDryRun() {
 			logger.DryRunInfo("Would clean repositories older than %d days", maxAge)
 			return
 		}
 
 		logger.Info("Cleaning cache (removing repositories older than %d days)...", maxAge)
-		
+
 		if err := cacheManager.CleanCache(maxAge); err != nil {
 			logger.Fatal("Failed to clean cache: %v", err)
 		}
@@ -131,7 +131,7 @@ func formatBytes(bytes int64) string {
 
 func init() {
 	rootCmd.AddCommand(cacheCmd)
-	
+
 	// Add subcommands
 	cacheCmd.AddCommand(cacheListCmd)
 	cacheCmd.AddCommand(cacheInfoCmd)

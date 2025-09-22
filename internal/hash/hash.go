@@ -115,7 +115,7 @@ func (fh *FileHasher) CompareHashes(oldHashes, newHashes map[string]string) (mod
 func (fh *FileHasher) VerifyFileIntegrity(baseDir string, expectedHashes map[string]string) (conflicts []FileConflict, err error) {
 	for relPath, expectedHash := range expectedHashes {
 		fullPath := filepath.Join(baseDir, relPath)
-		
+
 		// Check if file exists
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			conflicts = append(conflicts, FileConflict{

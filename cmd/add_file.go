@@ -46,42 +46,42 @@ Examples:
 
 		// Parse the URL path to extract repository URL and file path
 		repoURL, filePath := utils.ParseURLPath(urlPath)
-		
+
 		var source *config.Source
 		var exists bool
-		
+
 		if repoURL != "" {
 			// Repository URL provided in the path, find or create repository
 			repoName := utils.ExtractRepoName(repoURL)
-			
+
 			// Override with explicit repo name if provided
 			if fileRepoName != "" {
 				repoName = fileRepoName
 			}
-			
+
 			source, exists = cfg.GetSource(repoName)
 			if !exists {
 				// Auto-add repository if it doesn't exist
 				logger.Info("Repository '%s' not found, adding automatically...", repoName)
-				
+
 				authType := detectAuthType(repoURL)
 				auth := config.AuthConfig{
 					Type:     authType,
 					Username: "", // Will be detected automatically
 					SSHKey:   "",
 				}
-				
+
 				source = &config.Source{
 					Name:       repoName,
 					Repository: repoURL,
 					Auth:       auth,
 					Paths:      []config.PathSpec{},
 				}
-				
+
 				cfg.AddSource(*source)
 				logger.Info("✅ Auto-added repository '%s'", repoName)
 			}
-			
+
 			fileRepoName = repoName
 		} else {
 			// No repository URL in path, try to auto-detect from existing repositories
@@ -141,7 +141,7 @@ Examples:
 		var syncSuccess bool
 		if !logger.IsDryRun() {
 			logger.Info("🔄 Syncing file for the first time...")
-			
+
 			// Perform initial sync of the file
 			if err := performInitialSync(fileRepoName); err != nil {
 				logger.Error("Failed to sync file: %v", err)
@@ -173,7 +173,7 @@ Examples:
 			} else {
 				logger.Info("  Branch/Tag: (default)")
 			}
-			
+
 			if logger.IsDryRun() {
 				logger.DryRunInfo("Configuration would be saved to: %s", configFile)
 			} else {

@@ -54,9 +54,9 @@ func TestHashDirectory(t *testing.T) {
 
 	// Create test files
 	files := map[string]string{
-		"file1.txt": "content1",
-		"file2.txt": "content2",
-		"file3.tmp": "temp content",
+		"file1.txt":        "content1",
+		"file2.txt":        "content2",
+		"file3.tmp":        "temp content",
 		"subdir/file4.txt": "content4",
 	}
 
@@ -109,9 +109,9 @@ func TestCompareHashes(t *testing.T) {
 	}
 
 	newHashes := map[string]string{
-		"file1.txt": "hash1",      // unchanged
-		"file2.txt": "hash2_new",  // modified
-		"file4.txt": "hash4",      // added
+		"file1.txt": "hash1",     // unchanged
+		"file2.txt": "hash2_new", // modified
+		"file4.txt": "hash4",     // added
 		// file3.txt is removed
 	}
 

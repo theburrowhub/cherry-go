@@ -54,47 +54,47 @@ Examples:
 
 		// Parse the URL path to extract repository URL and directory path
 		repoURL, dirPath := utils.ParseURLPath(urlPath)
-		
+
 		// Ensure directory path ends with /
 		if dirPath != "" && !strings.HasSuffix(dirPath, "/") {
 			dirPath += "/"
 		}
-		
+
 		var source *config.Source
 		var exists bool
-		
+
 		if repoURL != "" {
 			// Repository URL provided in the path, find or create repository
 			repoName := utils.ExtractRepoName(repoURL)
-			
+
 			// Override with explicit repo name if provided
 			if dirRepoName != "" {
 				repoName = dirRepoName
 			}
-			
+
 			source, exists = cfg.GetSource(repoName)
 			if !exists {
 				// Auto-add repository if it doesn't exist
 				logger.Info("Repository '%s' not found, adding automatically...", repoName)
-				
+
 				authType := detectAuthType(repoURL)
 				auth := config.AuthConfig{
 					Type:     authType,
 					Username: "", // Will be detected automatically
 					SSHKey:   "",
 				}
-				
+
 				source = &config.Source{
 					Name:       repoName,
 					Repository: repoURL,
 					Auth:       auth,
 					Paths:      []config.PathSpec{},
 				}
-				
+
 				cfg.AddSource(*source)
 				logger.Info("✅ Auto-added repository '%s'", repoName)
 			}
-			
+
 			dirRepoName = repoName
 		} else {
 			// No repository URL in path, try to auto-detect from existing repositories
@@ -164,7 +164,7 @@ Examples:
 		var syncSuccess bool
 		if !logger.IsDryRun() {
 			logger.Info("🔄 Syncing directory for the first time...")
-			
+
 			// Perform initial sync of the directory
 			if err := performInitialSync(dirRepoName); err != nil {
 				logger.Error("Failed to sync directory: %v", err)
@@ -199,7 +199,7 @@ Examples:
 			if len(dirExcludes) > 0 {
 				logger.Info("  Excludes: %v", dirExcludes)
 			}
-			
+
 			if logger.IsDryRun() {
 				logger.DryRunInfo("Configuration would be saved to: %s", configFile)
 			} else {

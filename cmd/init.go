@@ -29,7 +29,7 @@ Examples:
 
 		// Create default configuration
 		defaultCfg := config.DefaultConfig()
-		
+
 		if logger.IsDryRun() {
 			logger.DryRunInfo("Would create configuration file: %s", configFile)
 			logger.Info("Default configuration:")

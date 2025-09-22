@@ -150,7 +150,7 @@ func TestSaveAndLoad(t *testing.T) {
 	if len(loadedSource.Paths) != 1 {
 		t.Errorf("Expected 1 path, got %d", len(loadedSource.Paths))
 	}
-	
+
 	if loadedSource.Paths[0].Branch != "develop" {
 		t.Errorf("Expected path branch 'develop', got %s", loadedSource.Paths[0].Branch)
 	}
