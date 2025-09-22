@@ -32,12 +32,15 @@ Features:
 - Dry-run mode for testing changes
 - Configurable via YAML file`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Configure logger based on flags
+		logger.SetVerbose(verbose)
+		logger.SetDryRun(dryRun)
+		
 		if verbose {
 			logger.Debug("Verbose mode enabled")
 		}
 
 		if dryRun {
-			logger.SetDryRun(true)
 			logger.Info("Running in dry-run mode - no changes will be made")
 		}
 
