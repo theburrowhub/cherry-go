@@ -1,9 +1,13 @@
 package logger
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"runtime"
+	"strings"
 )
 
 var (
@@ -12,25 +16,94 @@ var (
 	verbose bool
 )
 
-// Init initializes the structured logger
-func Init() {
-	// Create a text handler with custom options
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo, // Default level
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// Customize the time format to be more readable
-			if a.Key == slog.TimeKey {
-				return slog.String("time", a.Value.Time().Format("2006/01/02 15:04:05"))
-			}
-			// Remove source file info by default (can be enabled in verbose mode)
-			if a.Key == slog.SourceKey {
-				return slog.Attr{}
-			}
-			return a
-		},
+// CustomHandler implements a custom slog.Handler with TIMESTAMP [SEVERITY] MSG format
+type CustomHandler struct {
+	writer io.Writer
+	level  slog.Level
+	attrs  []slog.Attr
+}
+
+// NewCustomHandler creates a new custom handler
+func NewCustomHandler(w io.Writer, level slog.Level) *CustomHandler {
+	return &CustomHandler{
+		writer: w,
+		level:  level,
+		attrs:  make([]slog.Attr, 0),
+	}
+}
+
+// Enabled reports whether the handler handles records at the given level
+func (h *CustomHandler) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= h.level
+}
+
+// Handle formats and writes the log record
+func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
+	// Format: TIMESTAMP [SEVERITY] MSG
+	timestamp := r.Time.Format("2006/01/02 15:04:05")
+	severity := levelString(r.Level)
+	
+	// Build the message
+	msg := fmt.Sprintf("%s [%s] %s", timestamp, severity, r.Message)
+	
+	// Add source info in verbose mode
+	if verbose && r.PC != 0 {
+		// Get source file info from PC
+		frames := runtime.CallersFrames([]uintptr{r.PC})
+		frame, _ := frames.Next()
+		if frame.File != "" {
+			// Get just the filename, not the full path
+			parts := strings.Split(frame.File, "/")
+			filename := parts[len(parts)-1]
+			msg += fmt.Sprintf(" (%s:%d)", filename, frame.Line)
+		}
 	}
 	
-	handler := slog.NewTextHandler(os.Stdout, opts)
+	msg += "\n"
+	
+	_, err := h.writer.Write([]byte(msg))
+	return err
+}
+
+// WithAttrs returns a new handler with the given attributes
+func (h *CustomHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newAttrs := make([]slog.Attr, len(h.attrs)+len(attrs))
+	copy(newAttrs, h.attrs)
+	copy(newAttrs[len(h.attrs):], attrs)
+	
+	return &CustomHandler{
+		writer: h.writer,
+		level:  h.level,
+		attrs:  newAttrs,
+	}
+}
+
+// WithGroup returns a new handler with the given group
+func (h *CustomHandler) WithGroup(name string) slog.Handler {
+	// For simplicity, we'll ignore groups in this implementation
+	return h
+}
+
+// levelString converts slog.Level to string
+func levelString(level slog.Level) string {
+	switch level {
+	case slog.LevelDebug:
+		return "DEBUG"
+	case slog.LevelInfo:
+		return "INFO"
+	case slog.LevelWarn:
+		return "WARN"
+	case slog.LevelError:
+		return "ERROR"
+	default:
+		return "UNKNOWN"
+	}
+}
+
+// Init initializes the structured logger
+func Init() {
+	// Create custom handler with TIMESTAMP [SEVERITY] MSG format
+	handler := NewCustomHandler(os.Stdout, slog.LevelInfo)
 	logger = slog.New(handler)
 	
 	// Set as default logger
@@ -49,23 +122,8 @@ func SetVerbose(enabled bool) {
 		level = slog.LevelInfo
 	}
 	
-	// Create new handler with updated level
-	opts := &slog.HandlerOptions{
-		Level: level,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.String("time", a.Value.Time().Format("2006/01/02 15:04:05"))
-			}
-			// Show source in verbose mode
-			if a.Key == slog.SourceKey && !verbose {
-				return slog.Attr{}
-			}
-			return a
-		},
-		AddSource: verbose, // Add source file info in verbose mode
-	}
-	
-	handler := slog.NewTextHandler(os.Stdout, opts)
+	// Create new custom handler with updated level
+	handler := NewCustomHandler(os.Stdout, level)
 	logger = slog.New(handler)
 	slog.SetDefault(logger)
 }
@@ -102,47 +160,52 @@ func InfoContext(msg string, args ...any) {
 
 // Error logs an error message
 func Error(format string, v ...interface{}) {
-	// Log errors to stderr
-	errorHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelError,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.String("time", a.Value.Time().Format("2006/01/02 15:04:05"))
-			}
-			return a
-		},
-	})
+	// Create error handler that outputs to stderr
+	var level slog.Level
+	if verbose {
+		level = slog.LevelDebug
+	} else {
+		level = slog.LevelError
+	}
+	
+	errorHandler := NewCustomHandler(os.Stderr, level)
 	errorLogger := slog.New(errorHandler)
 	
+	var message string
 	if len(v) == 0 {
-		errorLogger.Error(format)
+		message = format
 	} else {
-		errorLogger.Error(fmt.Sprintf(format, v...))
+		message = fmt.Sprintf(format, v...)
 	}
+	
+	errorLogger.Error(message)
 }
 
 // ErrorContext logs an error message with context
 func ErrorContext(msg string, args ...any) {
-	errorHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelError,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.String("time", a.Value.Time().Format("2006/01/02 15:04:05"))
-			}
-			return a
-		},
-	})
+	// Create error handler that outputs to stderr
+	var level slog.Level
+	if verbose {
+		level = slog.LevelDebug
+	} else {
+		level = slog.LevelError
+	}
+	
+	errorHandler := NewCustomHandler(os.Stderr, level)
 	errorLogger := slog.New(errorHandler)
 	errorLogger.Error(msg, args...)
 }
 
 // Warning logs a warning message
 func Warning(format string, v ...interface{}) {
+	var message string
 	if len(v) == 0 {
-		logger.Warn(format)
+		message = format
 	} else {
-		logger.Warn(fmt.Sprintf(format, v...))
+		message = fmt.Sprintf(format, v...)
 	}
+	
+	logger.Warn(message)
 }
 
 // WarnContext logs a warning message with context
