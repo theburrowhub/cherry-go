@@ -1,3 +1,7 @@
+## [0.1.1] - 2025-09-22
+
+- fix: add workflow_dispatch trigger to build workflow and improve version detection
+
 ## [0.1.0] - 2025-09-22
 
 - feat: first commit
