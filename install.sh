@@ -55,19 +55,18 @@ detect_installation_mode() {
 }
 
 get_latest_release() {
-    print_info "Fetching latest release information..."
-    
     local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
+    local release_info
     
     if command -v curl &> /dev/null; then
-        local release_info=$(curl -s "$api_url")
+        release_info=$(curl -s "$api_url" 2>/dev/null)
     elif command -v wget &> /dev/null; then
-        local release_info=$(wget -qO- "$api_url")
+        release_info=$(wget -qO- "$api_url" 2>/dev/null)
     else
         print_error "Neither curl nor wget is available. Please install one of them."
     fi
     
-    local tag_name=$(echo "$release_info" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+    local tag_name=$(echo "$release_info" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' 2>/dev/null)
     
     if [ -z "$tag_name" ]; then
         print_error "Failed to get latest release information"
@@ -108,6 +107,7 @@ detect_platform() {
 }
 
 download_and_install_remote() {
+    print_info "Fetching latest release information..."
     local version=$(get_latest_release)
     local platform=$(detect_platform)
     local archive_name="${BINARY_NAME}-${platform}.tar.gz"
