@@ -1,3 +1,7 @@
+## [0.1.3] - 2025-09-22
+
+- fix: update GitHub Actions to latest versions
+
 ## [0.1.2] - 2025-09-22
 
 - fix: build binaries
