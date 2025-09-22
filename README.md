@@ -18,18 +18,28 @@ A command-line tool for partial versioning of files from other Git repositories.
 
 ## Installation
 
-### Quick Installation (Recommended)
+Cherry-go provides an intelligent installation script that automatically detects whether you're installing from a local repository or downloading from GitHub releases.
+
+### Remote Installation (Recommended)
+
+Install the latest release directly from GitHub:
 
 ```bash
-git clone https://github.com/your-username/cherry-go.git
-cd cherry-go
-./scripts/quick-install.sh
+curl -sSL https://raw.githubusercontent.com/theburrowhub/cherry-go/main/install.sh | bash
 ```
 
-### Full Installation with Backup Support
+Or using wget:
 
 ```bash
-git clone https://github.com/your-username/cherry-go.git
+wget -qO- https://raw.githubusercontent.com/theburrowhub/cherry-go/main/install.sh | bash
+```
+
+### Local Installation (Development)
+
+If you have the source code locally:
+
+```bash
+git clone https://github.com/theburrowhub/cherry-go.git
 cd cherry-go
 ./install.sh
 ```
@@ -43,12 +53,27 @@ cd cherry-go
 # Install to custom directory
 ./install.sh -d /usr/local/bin
 
-# Force reinstall without backup
+# Force reinstallation without backup
 ./install.sh --force
 
-# Dry run (see what would be done)
-./install.sh --dry-run
+# Force local build mode (requires Go)
+./install.sh --local
+
+# Force remote download mode
+./install.sh --remote
 ```
+
+### Platform Support
+
+The installation script automatically detects your platform and downloads the appropriate binary:
+
+- **Linux**: amd64, arm64
+- **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+
+### Requirements
+
+- **Remote installation**: No dependencies (downloads pre-built binaries)
+- **Local installation**: Go 1.21 or later
 
 ### Using Makefile
 
@@ -66,7 +91,7 @@ make install
 ### From Source (Manual)
 
 ```bash
-git clone https://github.com/your-username/cherry-go.git
+git clone https://github.com/theburrowhub/cherry-go.git
 cd cherry-go
 go build -o cherry-go
 # Copy to your preferred location
