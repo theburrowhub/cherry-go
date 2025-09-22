@@ -154,7 +154,7 @@ jobs:
         go-version: '1.21'
         
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/go-build
@@ -191,7 +191,7 @@ jobs:
         fi
         
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cherry-go-${{ matrix.suffix }}
         path: |
@@ -210,7 +210,7 @@ jobs:
         ref: main
         
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: ./artifacts
         
