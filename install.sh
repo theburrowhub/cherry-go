@@ -41,14 +41,17 @@ print_error() {
 }
 
 detect_installation_mode() {
-    # Check if we're running from a local git repository
+    # Check if we're running from a local git repository with cherry-go source
     if [ -f "go.mod" ] && [ -f "main.go" ] && [ -d ".git" ] && [ -d "cmd" ]; then
-        print_info "Detected local repository - will build from source"
-        return 0  # Local mode
-    else
-        print_info "Detected remote execution - will download from GitHub releases"
-        return 1  # Remote mode
+        # Additional check: verify it's actually the cherry-go repository
+        if grep -q "module cherry-go" go.mod 2>/dev/null; then
+            print_info "Detected local cherry-go repository - will build from source"
+            return 0  # Local mode
+        fi
     fi
+    
+    print_info "Detected remote execution - will download from GitHub releases"
+    return 1  # Remote mode
 }
 
 get_latest_release() {
@@ -165,6 +168,11 @@ check_go_dependencies() {
 build_and_install_local() {
     check_go_dependencies
     
+    # Verify we're in the correct directory
+    if [ ! -f "go.mod" ] || ! grep -q "module cherry-go" go.mod 2>/dev/null; then
+        print_error "Not in cherry-go repository directory. Please run from the cherry-go source directory."
+    fi
+    
     print_info "Building from local source..."
     
     # Get version information
@@ -190,7 +198,9 @@ build_and_install_local() {
     
     # Build the binary
     print_info "Compiling binary..."
-    go build -ldflags "$ldflags" -o "${INSTALL_DIR}/${BINARY_NAME}" || print_error "Failed to build binary"
+    if ! go build -ldflags "$ldflags" -o "${INSTALL_DIR}/${BINARY_NAME}"; then
+        print_error "Failed to build binary. Make sure you're in the cherry-go repository directory and Go modules are working."
+    fi
     
     # Make it executable
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
