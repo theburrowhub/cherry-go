@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g., v0.1.0)'
+        required: true
+        default: 'v0.1.0'
 
 permissions:
   contents: write
@@ -55,7 +61,11 @@ jobs:
     - name: Get version from tag
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.tag }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "Building version: ${VERSION}"
         
@@ -102,7 +112,11 @@ jobs:
     - name: Get version from tag
       id: version
       run: |
-        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.tag }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         
     - name: Download all artifacts
