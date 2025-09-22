@@ -56,7 +56,19 @@ jobs:
         echo "Next version: ${NEXT_VERSION}"
         
         # Generate changelog
-        CHANGELOG=$(git log --pretty=format:"- %s" ${CURRENT_VERSION}..HEAD)
+        if [ "${CURRENT_VERSION}" = "v0.0.0" ]; then
+          # For first release, get all commits
+          CHANGELOG=$(git log --pretty=format:"- %s" --reverse)
+        else
+          # For subsequent releases, get commits since last tag
+          if git rev-parse "${CURRENT_VERSION}" >/dev/null 2>&1; then
+            CHANGELOG=$(git log --pretty=format:"- %s" ${CURRENT_VERSION}..HEAD)
+          else
+            # Fallback if tag doesn't exist
+            CHANGELOG=$(git log --pretty=format:"- %s" --reverse)
+          fi
+        fi
+        
         echo "changelog<<EOF" >> $GITHUB_OUTPUT
         echo "${CHANGELOG}" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
