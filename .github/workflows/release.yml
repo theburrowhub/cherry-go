@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
 jobs:
   version-bump:
     name: Version Bump
@@ -20,6 +25,7 @@ jobs:
       with:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
+        persist-credentials: true
         
     - name: Set up Go
       uses: actions/setup-go@v4
