@@ -1,0 +1,91 @@
+# GitHub Actions example for using cherry-go in CI/CD
+# Place this file in .github/workflows/sync-dependencies.yml
+
+name: Sync External Dependencies
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+  push:
+    paths:
+      - '.cherry-go.yaml'
+      - '.github/workflows/sync-dependencies.yml'
+
+jobs:
+  sync-dependencies:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+    
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Install cherry-go
+      run: |
+        git clone https://github.com/your-username/cherry-go.git /tmp/cherry-go
+        cd /tmp/cherry-go
+        go build -o /usr/local/bin/cherry-go
+    
+    - name: Configure Git
+      run: |
+        git config --global user.name 'Cherry-go Bot'
+        git config --global user.email 'cherry-go@noreply.github.com'
+    
+    - name: Sync dependencies
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Export token for cherry-go authentication
+        export CHERRY_GO_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+        
+        # Run sync
+        cherry-go sync --all --verbose
+    
+    - name: Check for changes
+      id: changes
+      run: |
+        if git diff --quiet; then
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create Pull Request
+      if: steps.changes.outputs.has_changes == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'cherry-go: sync external dependencies'
+        title: 'Auto-sync external dependencies'
+        body: |
+          This PR was automatically created by cherry-go to sync external dependencies.
+          
+          Changes:
+          - Updated tracked files from external repositories
+          - Synced to latest commits from source repositories
+          
+          Please review the changes before merging.
+        branch: cherry-go/auto-sync
+        delete-branch: true
+
+---
+
+# Alternative: Direct commit approach (without PR)
+# Replace the "Create Pull Request" step with:
+
+    # - name: Commit and push changes
+    #   if: steps.changes.outputs.has_changes == 'true'
+    #   run: |
+    #     git add .
+    #     git commit -m "cherry-go: sync external dependencies [skip ci]"
+    #     git push origin main
+

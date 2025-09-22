@@ -1,0 +1,71 @@
+version: "1.0"
+
+sources:
+  # Public repository example
+  - name: "go-utils"
+    repository: "https://github.com/user/go-utils.git"
+    auth:
+      type: "auto"
+    paths:
+      - include: "pkg/logger/"
+        local_path: "internal/logger"
+        branch: "main"
+      - include: "pkg/config/"
+        exclude: ["*_test.go", "examples/"]
+        local_path: "internal/config"
+        branch: "stable"
+      - include: "README.md"
+        local_path: "docs/external/go-utils-README.md"
+        branch: "v2.1.0"
+
+  # Private repository with automatic authentication
+  # Uses GITHUB_TOKEN environment variable for HTTPS
+  # or SSH agent for SSH URLs
+  - name: "company-shared"
+    repository: "https://github.com/company/shared-components.git"
+    auth:
+      type: "auto"
+    paths:
+      - include: "components/auth/"
+        exclude: ["*.tmp", "test_*", "__pycache__/"]
+        local_path: "internal/auth"
+        branch: "stable"
+      - include: "components/database/"
+        local_path: "internal/db"
+        branch: "main"
+
+  # SSH authentication example
+  - name: "private-tools"
+    repository: "git@github.com:company/private-tools.git"
+    auth:
+      type: "ssh"
+      ssh_key: "~/.ssh/id_rsa"
+    paths:
+      - include: "scripts/"
+        exclude: ["*.log", "tmp/"]
+        branch: "develop"
+        # No local_path - will use same path as source: scripts/
+      - include: "configs/production.yaml"
+        local_path: "configs/production.yaml"
+        branch: "production"
+
+  # Basic authentication example
+  # Password comes from GIT_PASSWORD environment variable
+  - name: "legacy-system"
+    repository: "https://git.company.com/legacy/system.git"
+    auth:
+      type: "basic"
+      username: "deployment-user"
+      # password is read from GIT_PASSWORD env var for security
+    paths:
+      - include: "lib/core/"
+        exclude: ["*.o", "*.a", "build/"]
+        local_path: "vendor/legacy-core"
+        branch: "master"
+
+options:
+  auto_commit: true
+  commit_prefix: "cherry-go: sync"
+  create_branch: false
+  branch_prefix: "cherry-go/sync"
+
