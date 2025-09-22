@@ -1,3 +1,11 @@
+## [0.1.2] - 2025-09-22
+
+- fix: build binaries
+- Merge branch 'main' of github.com:theburrowhub/cherry-go
+- docs: update README for release workflow, renaming section and clarifying actions
+- ci: enhance release workflow with build and artifact management steps
+- ci: remove obsolete build workflow from GitHub Actions
+
 ## [0.1.1] - 2025-09-22
 
 - fix: add workflow_dispatch trigger to build workflow and improve version detection
