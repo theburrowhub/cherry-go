@@ -15,7 +15,7 @@ This directory contains the CI/CD workflows for cherry-go.
 - Coverage reporting to Codecov
 - Check `go mod tidy` status
 
-### 2. Release and Version Bump (`release.yml`)
+### 2. Release and Build (`release.yml`)
 **Trigger**: Push to `main` branch
 
 **Actions performed**:
@@ -24,16 +24,6 @@ This directory contains the CI/CD workflows for cherry-go.
 - Update `CHANGELOG.md` with new release notes
 - Commit version bump changes
 - Create and push git tag for the new version
-
-**Requirements**:
-- Uses conventional commit messages for version calculation
-- Requires `svu` (Semantic Version Util) for Go projects
-- Automatically skips CI if commit message contains `[skip ci]`
-
-### 3. Build and Release (`build.yml`)
-**Trigger**: Push of version tags (`v*`)
-
-**Actions performed**:
 - Build binaries for multiple platforms:
   - Linux (amd64, arm64)
   - macOS (amd64, arm64)
@@ -41,6 +31,11 @@ This directory contains the CI/CD workflows for cherry-go.
 - Generate SHA256 checksums
 - Create GitHub release with all artifacts
 - Extract changelog from `CHANGELOG.md` for release notes
+
+**Requirements**:
+- Uses conventional commit messages for version calculation
+- Requires `svu` (Semantic Version Util) for Go projects
+- Automatically skips CI if commit message contains `[skip ci]`
 
 ## Conventional Commits
 
@@ -75,5 +70,4 @@ The version bumping workflow uses conventional commits to determine the next ver
 
 2. **Releases**:
    - Merge PRs to `main` (triggers `release.yml`)
-   - Version bump and tag creation happens automatically
-   - Tag push triggers `build.yml` for binary releases
+   - Version bump, tag creation, binary build and release happen automatically in sequence
