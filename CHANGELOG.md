@@ -1,3 +1,14 @@
+## [0.2.0] - 2025-09-23
+
+- feat: add CherryBunch structure and related functions
+- chore: update go.mod with additional indirect dependencies
+- refactor: implement custom logger handler with enhanced formatting
+- refactor: enhance logger functionality and configuration
+- chore: improve error handling in installation script for fetching latest release
+- chore: improve installation script for cherry-go repository detection
+- Merge branch 'main' of github.com:theburrowhub/cherry-go
+- chore: enhance installation script with local and remote modes
+
 ## [0.1.3] - 2025-09-22
 
 - fix: update GitHub Actions to latest versions
