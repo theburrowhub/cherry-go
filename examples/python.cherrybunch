@@ -1,0 +1,34 @@
+name: python-setup
+description: Basic Python project setup with common configuration files
+version: "1.0"
+repository: https://github.com/example/python-templates.git
+auth:
+  type: auto
+files:
+  - path: .gitignore
+    local_path: .gitignore
+    branch: main
+  - path: requirements.txt
+    local_path: requirements.txt
+    branch: main
+  - path: pyproject.toml
+    local_path: pyproject.toml
+    branch: main
+  - path: README.template.md
+    local_path: README.md
+    branch: main
+directories:
+  - path: src/
+    local_path: src/
+    branch: main
+    exclude:
+      - "*.pyc"
+      - "__pycache__"
+      - "*.egg-info"
+  - path: tests/
+    local_path: tests/
+    branch: main
+    exclude:
+      - "*.pyc"
+      - "__pycache__"
+      - ".pytest_cache"
