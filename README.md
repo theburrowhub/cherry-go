@@ -298,6 +298,10 @@ cherry-go sync --all --dry-run
 
 # Force sync (override local changes)
 cherry-go sync --all --force
+
+# Override autocommit setting for this execution
+cherry-go sync --all --autocommit=true   # Force commit even if auto_commit is false
+cherry-go sync --all --autocommit=false  # Skip commit even if auto_commit is true
 ```
 
 ### `cache` - Manage repository cache

@@ -294,11 +294,16 @@ func (r *Repository) Pull() error {
 
 // GetLatestCommit returns the latest commit hash
 func (r *Repository) GetLatestCommit() (string, error) {
+	if r.repo == nil {
+		// In dry-run mode, repository might be nil
+		return "dry-run-commit-hash", nil
+	}
+	
 	ref, err := r.repo.Head()
 	if err != nil {
 		return "", fmt.Errorf("failed to get HEAD: %w", err)
 	}
-
+	
 	return ref.Hash().String(), nil
 }
 
