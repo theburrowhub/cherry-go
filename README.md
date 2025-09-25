@@ -157,7 +157,10 @@ cherry-go add directory https://github.com/user/library.git/docs/ --branch v1.2.
 # Check current status
 cherry-go status
 
-# Sync for updates (when needed)
+# Sync all sources (with confirmation)
+cherry-go sync
+
+# Sync specific source
 cherry-go sync library
 ```
 
@@ -287,22 +290,28 @@ cherry-go remove SOURCE_NAME
 Sync files from tracked repositories:
 
 ```bash
-# Sync all sources
-cherry-go sync --all
+# Sync all sources (with confirmation prompt)
+cherry-go sync
 
 # Sync specific source
 cherry-go sync SOURCE_NAME
 
 # Dry run (no changes made)
-cherry-go sync --all --dry-run
+cherry-go sync --dry-run
 
 # Force sync (override local changes)
-cherry-go sync --all --force
+cherry-go sync --force
 
 # Override autocommit setting for this execution
-cherry-go sync --all --autocommit=true   # Force commit even if auto_commit is false
-cherry-go sync --all --autocommit=false  # Skip commit even if auto_commit is true
+cherry-go sync --autocommit=true   # Force commit even if auto_commit is false
+cherry-go sync --autocommit=false  # Skip commit even if auto_commit is true
 ```
+
+**Interactive Behavior:**
+- If no source is specified, syncs all sources with confirmation prompt
+- In non-interactive environments (CI/CD), proceeds automatically
+- Default response is "Yes" for confirmation
+- Can be disabled with `CHERRY_GO_NO_PROMPT=1` environment variable
 
 ### `cache` - Manage repository cache
 
