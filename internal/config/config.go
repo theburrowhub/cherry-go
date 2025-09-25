@@ -25,11 +25,19 @@ type Source struct {
 
 // PathSpec represents a path specification with includes and excludes
 type PathSpec struct {
-	Include   string            `yaml:"include"`
-	Exclude   []string          `yaml:"exclude,omitempty"`
-	LocalPath string            `yaml:"local_path,omitempty"` // Exact local path where file/dir should be placed
-	Branch    string            `yaml:"branch,omitempty"`     // Branch or tag to track for this specific path
-	Files     map[string]string `yaml:"files,omitempty"`      // filename -> hash mapping
+	Include     string                 `yaml:"include"`
+	Exclude     []string               `yaml:"exclude,omitempty"`
+	LocalPath   string                 `yaml:"local_path,omitempty"` // Exact local path where file/dir should be placed
+	Branch      string                 `yaml:"branch,omitempty"`     // Branch or tag to track for this specific path
+	Files       map[string]FileTraking `yaml:"files,omitempty"`      // filename -> tracking info
+	LastCommit  string                 `yaml:"last_commit,omitempty"` // Last commit hash applied for this path
+}
+
+// FileTraking represents tracking information for a file
+type FileTraking struct {
+	Hash       string `yaml:"hash"`        // Current file hash
+	LastCommit string `yaml:"last_commit"` // Last commit hash when this file was synced
+	Modified   bool   `yaml:"modified"`    // Whether file has been locally modified
 }
 
 // AuthConfig represents authentication configuration
