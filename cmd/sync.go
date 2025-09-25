@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	syncAll   bool
-	forceSync bool
+	syncAll         bool
+	forceSync       bool
+	overrideAutocommit *bool // Pointer to distinguish between not set and false
 )
 
 // syncCmd represents the sync command
@@ -34,7 +35,11 @@ Examples:
   cherry-go sync --all --dry-run
   
   # Force sync (override local changes)
-  cherry-go sync --all --force`,
+  cherry-go sync --all --force
+  
+  # Override auto-commit setting for this execution
+  cherry-go sync --all --autocommit=true   # Force commit even if auto_commit is false
+  cherry-go sync --all --autocommit=false  # Skip commit even if auto_commit is true`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var sourceName string
 		if len(args) > 0 {
@@ -196,16 +201,35 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 		}
 	}
 
-	// Create commit if auto-commit is enabled and there are changes
-	if cfg.Options.AutoCommit && result.HasChanges && !logger.IsDryRun() {
-		commitMessage := fmt.Sprintf("%s %s from %s (%s)",
-			cfg.Options.CommitPrefix,
-			source.Name,
-			source.Repository,
-			commitHash[:8])
+	// Determine if we should commit based on config and override
+	shouldCommit := cfg.Options.AutoCommit
+	if overrideAutocommit != nil {
+		shouldCommit = *overrideAutocommit
+		if *overrideAutocommit {
+			logger.Info("🔧 Overriding autocommit: forcing commit for this execution")
+		} else {
+			logger.Info("🔧 Overriding autocommit: skipping commit for this execution")
+		}
+	}
 
+	// Create commit if enabled and there are changes
+	if shouldCommit && result.HasChanges && !logger.IsDryRun() {
+		commitMessage := fmt.Sprintf("%s %s from %s (%s)", 
+			cfg.Options.CommitPrefix, 
+			source.Name, 
+			source.Repository, 
+			commitHash[:8])
+		
 		if err := git.CreateCommit(workDir, commitMessage, updatedPaths); err != nil {
 			logger.Error("Failed to create commit: %v", err)
+		} else {
+			logger.Info("✅ Created commit: %s", commitMessage)
+		}
+	} else if !shouldCommit && result.HasChanges {
+		if overrideAutocommit != nil {
+			logger.Info("📝 Changes synced but not committed (autocommit overridden to false)")
+		} else {
+			logger.Info("📝 Changes synced but not committed (autocommit disabled in config)")
 		}
 	}
 
@@ -214,7 +238,18 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 
 func init() {
 	rootCmd.AddCommand(syncCmd)
-
+	
 	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all configured sources")
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
+	
+	// Use a custom flag function to handle the pointer
+	syncCmd.Flags().BoolVar(new(bool), "autocommit", false, "override autocommit setting (true=force commit, false=skip commit)")
+	
+	// Custom handling for the autocommit flag
+	syncCmd.PreRun = func(cmd *cobra.Command, args []string) {
+		if cmd.Flags().Changed("autocommit") {
+			autocommitValue, _ := cmd.Flags().GetBool("autocommit")
+			overrideAutocommit = &autocommitValue
+		}
+	}
 }
