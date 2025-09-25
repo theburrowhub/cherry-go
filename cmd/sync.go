@@ -3,6 +3,7 @@ package cmd
 import (
 	"cherry-go/internal/config"
 	"cherry-go/internal/git"
+	"cherry-go/internal/interactive"
 	"cherry-go/internal/logger"
 	"fmt"
 	"os"
@@ -12,7 +13,6 @@ import (
 )
 
 var (
-	syncAll         bool
 	forceSync       bool
 	overrideAutocommit *bool // Pointer to distinguish between not set and false
 )
@@ -21,50 +21,76 @@ var (
 var syncCmd = &cobra.Command{
 	Use:   "sync [source-name]",
 	Short: "Synchronize files from tracked repositories",
-	Long: `Synchronize files from one or all tracked source repositories.
+	Long: `Synchronize files from tracked source repositories.
 This will pull the latest changes and update local files accordingly.
 
+If no source name is provided, all configured sources will be synchronized
+(with confirmation prompt in interactive mode).
+
 Examples:
-  # Sync all sources
-  cherry-go sync --all
+  # Sync all sources (with confirmation prompt)
+  cherry-go sync
   
   # Sync specific source
   cherry-go sync mylib
   
   # Dry run sync
-  cherry-go sync --all --dry-run
+  cherry-go sync --dry-run
   
   # Force sync (override local changes)
-  cherry-go sync --all --force
+  cherry-go sync --force
   
-  # Override auto-commit setting for this execution
-  cherry-go sync --all --autocommit=true   # Force commit even if auto_commit is false
-  cherry-go sync --all --autocommit=false  # Skip commit even if auto_commit is true`,
+  # Override autocommit setting for this execution
+  cherry-go sync --autocommit=true   # Force commit even if auto_commit is false
+  cherry-go sync --autocommit=false  # Skip commit even if auto_commit is true`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var sourceName string
 		if len(args) > 0 {
 			sourceName = args[0]
 		}
 
-		if !syncAll && sourceName == "" {
-			logger.Fatal("Either specify a source name or use --all flag")
-		}
-
-		if syncAll && sourceName != "" {
-			logger.Fatal("Cannot specify both --all and a source name")
-		}
-
 		workDir, err := os.Getwd()
 		if err != nil {
 			logger.Fatal("Failed to get current directory: %v", err)
 		}
-
-		if syncAll {
-			syncAllSources(workDir)
+		
+		if sourceName == "" {
+			// No source specified, sync all with confirmation
+			syncAllSourcesWithConfirmation(workDir)
 		} else {
+			// Specific source specified
 			syncSingleSource(sourceName, workDir)
 		}
 	},
+}
+
+func syncAllSourcesWithConfirmation(workDir string) {
+	if len(cfg.Sources) == 0 {
+		logger.Info("No sources configured to sync")
+		return
+	}
+	
+	// Show what will be synced
+	logger.Info("The following %d source(s) will be synchronized:", len(cfg.Sources))
+	for i, source := range cfg.Sources {
+		pathCount := len(source.Paths)
+		logger.Info("  %d. %s (%s) - %d path(s)", i+1, source.Name, source.Repository, pathCount)
+	}
+	logger.Info("")
+	
+	// Ask for confirmation in interactive mode
+	if interactive.ShouldPrompt() && !logger.IsDryRun() {
+		if !interactive.Confirm("Do you want to proceed with synchronization?") {
+			logger.Info("Synchronization cancelled by user")
+			return
+		}
+		logger.Info("")
+	} else if !interactive.ShouldPrompt() {
+		logger.Info("Non-interactive mode detected, proceeding automatically...")
+	}
+	
+	// Proceed with sync
+	syncAllSources(workDir)
 }
 
 func syncAllSources(workDir string) {
@@ -239,7 +265,6 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 func init() {
 	rootCmd.AddCommand(syncCmd)
 	
-	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all configured sources")
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
 	
 	// Use a custom flag function to handle the pointer
