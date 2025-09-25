@@ -18,8 +18,8 @@ cherry-go add directory https://github.com/user/utils.git/lib/ --local-path vend
 # Check status
 cherry-go status
 
-# Sync updates
-cherry-go sync --all
+# Sync all sources (with confirmation)
+cherry-go sync
 ```
 
 ## Step-by-step Examples
@@ -54,8 +54,8 @@ cherry-go add file git@github.com:company/private.git/src/auth.go --local-path i
 cherry-go add file config/database.yaml
 cherry-go add directory scripts/ --branch production
 
-# Sync updates
-cherry-go sync private
+# Sync all sources (with confirmation)
+cherry-go sync
 ```
 
 ### Multiple Repositories
