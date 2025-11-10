@@ -364,7 +364,7 @@ main() {
     
     # Handle existing installation
     if [ "$FORCE_INSTALL" = false ]; then
-        backup_existing
+        backup_existing || true
     fi
     
     # Install based on mode
