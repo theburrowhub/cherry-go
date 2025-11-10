@@ -1,3 +1,9 @@
+## [0.2.1] - 2025-11-10
+
+- fix(install.sh): install script crashing when backup existing fails
+- Remove cherry-go/issue-58.md
+- Recreate issue 'Make autocommit optional and include .cherry-go.yaml file in commits' from freepik-company/ai-platform-iqs-v2
+
 ## [0.2.0] - 2025-09-23
 
 - feat: add CherryBunch structure and related functions
