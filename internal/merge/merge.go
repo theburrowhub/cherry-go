@@ -16,13 +16,285 @@ type MergeResult struct {
 	HasConflict bool   // Whether there were conflicts that couldn't be auto-resolved
 }
 
-// ThreeWayMerge performs a three-way merge using git merge-file
+// ThreeWayMerge performs a patch-based merge (default behavior)
+// This approach:
+// 1. Creates a patch from base→remote (what changed in remote)
+// 2. Applies that patch on top of local content
+// This preserves local changes and only conflicts when the patch cannot be applied
+//
 // base: the common ancestor content (last synced version)
 // local: the current local content
 // remote: the new remote content
 func ThreeWayMerge(base, local, remote []byte) (MergeResult, error) {
-	// Create temporary files for the merge
-	tempDir, err := os.MkdirTemp("", "cherry-go-merge-*")
+	// Use patch-based merge by default
+	return PatchBasedMerge(base, local, remote)
+}
+
+// PatchBasedMerge applies remote changes as a patch on top of local content
+// This preserves local additions while incorporating remote modifications
+func PatchBasedMerge(base, local, remote []byte) (MergeResult, error) {
+	// If base equals remote, no remote changes - keep local as is
+	if bytes.Equal(base, remote) {
+		return MergeResult{
+			Success: true,
+			Content: local,
+		}, nil
+	}
+
+	// If base equals local, no local changes - take remote
+	if bytes.Equal(base, local) {
+		return MergeResult{
+			Success: true,
+			Content: remote,
+		}, nil
+	}
+
+	// If local equals remote, both made same changes
+	if bytes.Equal(local, remote) {
+		return MergeResult{
+			Success: true,
+			Content: local,
+		}, nil
+	}
+
+	// Try semantic line-based merge first
+	// This preserves local additions while applying remote modifications
+	result, success := semanticLineMerge(base, local, remote)
+	if success {
+		return MergeResult{
+			Success: true,
+			Content: result,
+		}, nil
+	}
+
+	// Fallback to git-based merge for complex cases
+	tempDir, err := os.MkdirTemp("", "cherry-go-patch-*")
+	if err != nil {
+		return MergeResult{}, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	return applyPatchWithGit(tempDir, base, local, remote)
+}
+
+// semanticLineMerge performs a line-based merge that preserves local additions
+// Returns the merged content and true if successful, or nil and false if there's a real conflict
+func semanticLineMerge(base, local, remote []byte) ([]byte, bool) {
+	baseLines := strings.Split(string(base), "\n")
+	localLines := strings.Split(string(local), "\n")
+	remoteLines := strings.Split(string(remote), "\n")
+
+	// Build sets for quick lookup
+	baseSet := make(map[string]bool)
+	for _, line := range baseLines {
+		if line != "" {
+			baseSet[line] = true
+		}
+	}
+
+	localSet := make(map[string]bool)
+	for _, line := range localLines {
+		if line != "" {
+			localSet[line] = true
+		}
+	}
+
+	remoteSet := make(map[string]bool)
+	for _, line := range remoteLines {
+		if line != "" {
+			remoteSet[line] = true
+		}
+	}
+
+	// Find what each side did
+	// Lines removed from base by local
+	var localRemovals []string
+	for _, line := range baseLines {
+		if line != "" && !localSet[line] {
+			localRemovals = append(localRemovals, line)
+		}
+	}
+
+	// Lines removed from base by remote
+	var remoteRemovals []string
+	for _, line := range baseLines {
+		if line != "" && !remoteSet[line] {
+			remoteRemovals = append(remoteRemovals, line)
+		}
+	}
+
+	// Lines added by local (not in base)
+	var localAdditions []string
+	for _, line := range localLines {
+		if line != "" && !baseSet[line] {
+			localAdditions = append(localAdditions, line)
+		}
+	}
+
+	// Lines added by remote (not in base)
+	var remoteAdditions []string
+	for _, line := range remoteLines {
+		if line != "" && !baseSet[line] {
+			remoteAdditions = append(remoteAdditions, line)
+		}
+	}
+
+	// CONFLICT DETECTION: If both sides removed the same line and added different content,
+	// that's a real conflict (both modified the same line differently)
+	if len(localRemovals) > 0 && len(remoteRemovals) > 0 {
+		// Check if they removed the same lines
+		localRemovalSet := make(map[string]bool)
+		for _, line := range localRemovals {
+			localRemovalSet[line] = true
+		}
+
+		for _, line := range remoteRemovals {
+			if localRemovalSet[line] {
+				// Both removed the same line
+				// If both also added different content, it's a conflict
+				if len(localAdditions) > 0 && len(remoteAdditions) > 0 {
+					// Check if they added the same thing
+					localAddSet := make(map[string]bool)
+					for _, add := range localAdditions {
+						localAddSet[add] = true
+					}
+
+					hasDifferentAdditions := false
+					for _, add := range remoteAdditions {
+						if !localAddSet[add] {
+							hasDifferentAdditions = true
+							break
+						}
+					}
+
+					if hasDifferentAdditions {
+						// Real conflict: both modified the same line differently
+						return nil, false
+					}
+				}
+			}
+		}
+	}
+
+	// SPECIAL CASE: Local only added lines (didn't modify existing ones)
+	// In this case, take remote changes and append local additions
+	if len(localRemovals) == 0 && len(localAdditions) > 0 {
+		// Local only added lines - apply remote changes and keep local additions
+		var result []string
+		result = append(result, remoteLines...)
+
+		// Remove trailing empty line if present
+		if len(result) > 0 && result[len(result)-1] == "" {
+			result = result[:len(result)-1]
+		}
+
+		// Append local additions (that aren't already in remote)
+		for _, add := range localAdditions {
+			if !remoteSet[add] {
+				result = append(result, add)
+			}
+		}
+
+		resultStr := strings.Join(result, "\n")
+		if !strings.HasSuffix(resultStr, "\n") && len(resultStr) > 0 {
+			resultStr += "\n"
+		}
+		return []byte(resultStr), true
+	}
+
+	// For other cases, fall back to git merge
+	return nil, false
+}
+
+// applyPatchWithGit creates a git repo and applies remote changes as a patch on local
+// This preserves local additions while incorporating remote modifications
+func applyPatchWithGit(tempDir string, base, local, remote []byte) (MergeResult, error) {
+	gitDir := filepath.Join(tempDir, "repo")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		return fallbackToGitMergeFile(base, local, remote)
+	}
+
+	// Init git repo
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = gitDir
+	if err := initCmd.Run(); err != nil {
+		return fallbackToGitMergeFile(base, local, remote)
+	}
+
+	// Configure git
+	exec.Command("git", "-C", gitDir, "config", "user.email", "cherry-go@local").Run()
+	exec.Command("git", "-C", gitDir, "config", "user.name", "cherry-go").Run()
+
+	targetFile := filepath.Join(gitDir, "file")
+
+	// Step 1: Create base commit
+	if err := os.WriteFile(targetFile, base, 0644); err != nil {
+		return fallbackToGitMergeFile(base, local, remote)
+	}
+	exec.Command("git", "-C", gitDir, "add", ".").Run()
+	exec.Command("git", "-C", gitDir, "commit", "-m", "base").Run()
+
+	// Step 2: Apply local changes and commit
+	if err := os.WriteFile(targetFile, local, 0644); err != nil {
+		return fallbackToGitMergeFile(base, local, remote)
+	}
+	exec.Command("git", "-C", gitDir, "add", ".").Run()
+	exec.Command("git", "-C", gitDir, "commit", "-m", "local").Run()
+
+	// Step 3: Create patch from base to remote
+	baseFile := filepath.Join(tempDir, "base_for_diff")
+	remoteFile := filepath.Join(tempDir, "remote_for_diff")
+	os.WriteFile(baseFile, base, 0644)
+	os.WriteFile(remoteFile, remote, 0644)
+
+	diffCmd := exec.Command("diff", "-u", baseFile, remoteFile)
+	patchContent, _ := diffCmd.Output()
+
+	if len(patchContent) == 0 {
+		return MergeResult{Success: true, Content: local}, nil
+	}
+
+	// Fix patch header to reference the correct file in repo
+	patchStr := string(patchContent)
+	patchStr = strings.Replace(patchStr, baseFile, "a/file", 1)
+	patchStr = strings.Replace(patchStr, remoteFile, "b/file", 1)
+
+	patchFile := filepath.Join(tempDir, "remote.patch")
+	os.WriteFile(patchFile, []byte(patchStr), 0644)
+
+	// Step 4: Try git apply --3way (applies patch with 3-way merge on conflicts)
+	applyCmd := exec.Command("git", "-C", gitDir, "apply", "--3way", patchFile)
+	applyErr := applyCmd.Run()
+
+	// Read result
+	resultContent, err := os.ReadFile(targetFile)
+	if err != nil {
+		return fallbackToGitMergeFile(base, local, remote)
+	}
+
+	// Check result
+	if applyErr != nil || ContainsConflictMarkers(resultContent) {
+		// If git apply --3way left conflict markers, use them
+		if ContainsConflictMarkers(resultContent) {
+			return MergeResult{
+				Content:     resultContent,
+				Success:     false,
+				HasConflict: true,
+			}, nil
+		}
+		// Otherwise fallback to git merge-file for proper conflict markers
+		return fallbackToGitMergeFile(base, local, remote)
+	}
+
+	return MergeResult{
+		Success: true,
+		Content: resultContent,
+	}, nil
+}
+
+// fallbackToGitMergeFile uses the traditional three-way merge as last resort
+func fallbackToGitMergeFile(base, local, remote []byte) (MergeResult, error) {
+	tempDir, err := os.MkdirTemp("", "cherry-go-merge-fallback-*")
 	if err != nil {
 		return MergeResult{}, fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -32,24 +304,10 @@ func ThreeWayMerge(base, local, remote []byte) (MergeResult, error) {
 	localFile := filepath.Join(tempDir, "local")
 	remoteFile := filepath.Join(tempDir, "remote")
 
-	// Write content to temp files
-	if err := os.WriteFile(baseFile, base, 0644); err != nil {
-		return MergeResult{}, fmt.Errorf("failed to write base file: %w", err)
-	}
-	if err := os.WriteFile(localFile, local, 0644); err != nil {
-		return MergeResult{}, fmt.Errorf("failed to write local file: %w", err)
-	}
-	if err := os.WriteFile(remoteFile, remote, 0644); err != nil {
-		return MergeResult{}, fmt.Errorf("failed to write remote file: %w", err)
-	}
+	os.WriteFile(baseFile, base, 0644)
+	os.WriteFile(localFile, local, 0644)
+	os.WriteFile(remoteFile, remote, 0644)
 
-	// Run git merge-file
-	// -p: print result to stdout
-	// --diff3: show base version in conflict markers
-	// git merge-file returns:
-	//   0: merge was successful
-	//   >0: number of conflicts (merge attempted but has conflicts)
-	//   <0: error occurred
 	cmd := exec.Command("git", "merge-file", "-p", "--diff3",
 		"-L", "LOCAL",
 		"-L", "BASE",
@@ -68,13 +326,11 @@ func ThreeWayMerge(base, local, remote []byte) (MergeResult, error) {
 		return MergeResult{}, fmt.Errorf("failed to run git merge-file: %w (stderr: %s)", err, stderr.String())
 	}
 
-	result := MergeResult{
+	return MergeResult{
 		Content:     stdout.Bytes(),
 		Success:     exitCode == 0,
 		HasConflict: exitCode > 0,
-	}
-
-	return result, nil
+	}, nil
 }
 
 // MergeFile performs a three-way merge on files specified by paths
@@ -276,4 +532,98 @@ func FormatConflictSummary(results []FileMergeResult) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// ShowDiff displays the difference between local and remote content (side by side)
+func ShowDiff(localPath, remotePath, fileName string) {
+	local, err1 := os.ReadFile(localPath)
+	remote, err2 := os.ReadFile(remotePath)
+
+	if err1 != nil || err2 != nil {
+		fmt.Printf("\n[Cannot show diff for %s]\n", fileName)
+		return
+	}
+
+	ShowDiffFromContent(local, remote, fileName)
+}
+
+// ShowDiffFromContent displays local and remote content side by side
+func ShowDiffFromContent(local, remote []byte, fileName string) {
+	showSideBySide(local, remote, fileName)
+}
+
+// showSideBySide displays local and remote content in parallel columns
+func showSideBySide(local, remote []byte, fileName string) {
+	localLines := strings.Split(string(local), "\n")
+	remoteLines := strings.Split(string(remote), "\n")
+
+	// Column width for each side
+	const colWidth = 38
+	const separator = " │ "
+
+	// Header
+	fmt.Println()
+	fmt.Printf("┌─── %s ───\n", fileName)
+	fmt.Printf("│\n")
+	fmt.Printf("│  \033[36m%-*s\033[0m%s\033[33m%-*s\033[0m\n", colWidth, "LOCAL (your changes)", separator, colWidth, "REMOTE (source)")
+	fmt.Printf("│  %s%s%s\n", strings.Repeat("─", colWidth), "─┼─", strings.Repeat("─", colWidth))
+
+	// Get max lines
+	maxLines := len(localLines)
+	if len(remoteLines) > maxLines {
+		maxLines = len(remoteLines)
+	}
+
+	// Limit output
+	maxDisplay := 40
+	if maxLines > maxDisplay {
+		maxLines = maxDisplay
+	}
+
+	// Display side by side
+	for i := 0; i < maxLines; i++ {
+		localLine := ""
+		remoteLine := ""
+
+		if i < len(localLines) {
+			localLine = localLines[i]
+		}
+		if i < len(remoteLines) {
+			remoteLine = remoteLines[i]
+		}
+
+		// Truncate long lines
+		if len(localLine) > colWidth {
+			localLine = localLine[:colWidth-3] + "..."
+		}
+		if len(remoteLine) > colWidth {
+			remoteLine = remoteLine[:colWidth-3] + "..."
+		}
+
+		// Determine if lines differ
+		isDiff := localLine != remoteLine
+
+		if isDiff {
+			// Highlight differences
+			fmt.Printf("│  \033[36m%-*s\033[0m%s\033[33m%-*s\033[0m  \033[31m◄\033[0m\n", colWidth, localLine, separator, colWidth, remoteLine)
+		} else {
+			fmt.Printf("│  %-*s%s%-*s\n", colWidth, localLine, separator, colWidth, remoteLine)
+		}
+	}
+
+	if len(localLines) > maxDisplay || len(remoteLines) > maxDisplay {
+		fmt.Printf("│  ... (%d more lines)\n", max(len(localLines), len(remoteLines))-maxDisplay)
+	}
+
+	fmt.Println("│")
+	fmt.Printf("│  \033[31m◄\033[0m = lines that differ\n")
+	fmt.Println("└" + strings.Repeat("─", 85))
+}
+
+// max returns the larger of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

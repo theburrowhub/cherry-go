@@ -14,6 +14,7 @@ import (
 var (
 	syncAll          bool
 	forceSync        bool
+	mergeSync        bool
 	branchOnConflict bool
 )
 
@@ -24,25 +25,26 @@ var syncCmd = &cobra.Command{
 	Long: `Synchronize files from one or all tracked source repositories.
 This will pull the latest changes and update local files accordingly.
 
-By default, cherry-go will attempt a three-way merge when local changes
-are detected. If the merge succeeds, changes are applied automatically.
-If conflicts cannot be resolved, the sync is aborted.
+By default, cherry-go will detect and report conflicts WITHOUT making changes.
+This allows you to review what would change before deciding how to proceed.
+
+Use --merge to attempt automatic merging, or --force to overwrite local changes.
 
 Examples:
-  # Sync all sources (with automatic merge)
+  # Check for updates and conflicts (default - no changes made)
   cherry-go sync --all
   
-  # Sync specific source
-  cherry-go sync mylib
-  
-  # Dry run sync
-  cherry-go sync --all --dry-run
+  # Sync with automatic merge
+  cherry-go sync --all --merge
   
   # Force sync (override local changes)
   cherry-go sync --all --force
   
-  # Create branch on conflict for manual resolution
-  cherry-go sync --all --branch-on-conflict`,
+  # Merge with branch creation on conflict
+  cherry-go sync --all --merge --branch-on-conflict
+  
+  # Dry run to preview changes
+  cherry-go sync --all --dry-run`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var sourceName string
 		if len(args) > 0 {
@@ -57,8 +59,16 @@ Examples:
 			logger.Fatal("Cannot specify both --all and a source name")
 		}
 
+		if forceSync && mergeSync {
+			logger.Fatal("Cannot specify both --force and --merge")
+		}
+
 		if forceSync && branchOnConflict {
 			logger.Fatal("Cannot specify both --force and --branch-on-conflict")
+		}
+
+		if branchOnConflict && !mergeSync {
+			logger.Fatal("--branch-on-conflict requires --merge flag")
 		}
 
 		workDir, err := os.Getwd()
@@ -82,10 +92,13 @@ func getSyncMode() git.SyncMode {
 	if forceSync {
 		return git.SyncModeForce
 	}
-	if branchOnConflict {
-		return git.SyncModeBranch
+	if mergeSync {
+		if branchOnConflict {
+			return git.SyncModeBranch
+		}
+		return git.SyncModeMerge
 	}
-	return git.SyncModeMerge // Default: attempt three-way merge
+	return git.SyncModeDetect // Default: only detect conflicts, don't make changes
 }
 
 func syncAllSources(workDir string, mode git.SyncMode) {
@@ -94,7 +107,11 @@ func syncAllSources(workDir string, mode git.SyncMode) {
 		return
 	}
 
-	logger.Info("Syncing %d source(s)...", len(cfg.Sources))
+	if mode == git.SyncModeDetect {
+		logger.Info("Checking %d source(s) for updates...", len(cfg.Sources))
+	} else {
+		logger.Info("Syncing %d source(s)...", len(cfg.Sources))
+	}
 
 	// Use goroutines for concurrent syncing
 	var wg sync.WaitGroup
@@ -118,15 +135,19 @@ func syncAllSources(workDir string, mode git.SyncMode) {
 	// Collect results
 	var totalUpdated int
 	var hasErrors bool
-	var hasBranchCreated bool
+	var hasConflicts bool
+	var branchesCreated []git.SyncResult
+	var conflictResults []git.SyncResult
 
 	for result := range results {
 		if result.Error != nil {
 			logger.Error("Failed to sync %s: %v", result.SourceName, result.Error)
 			hasErrors = true
 		} else if result.BranchCreated != "" {
-			logger.Info("Conflict branch created for %s: %s", result.SourceName, result.BranchCreated)
-			hasBranchCreated = true
+			branchesCreated = append(branchesCreated, result)
+		} else if len(result.Conflicts) > 0 && mode == git.SyncModeDetect {
+			hasConflicts = true
+			conflictResults = append(conflictResults, result)
 		} else if result.HasChanges {
 			logger.Info("Successfully synced %s (%d paths updated)", result.SourceName, len(result.UpdatedPaths))
 			totalUpdated += len(result.UpdatedPaths)
@@ -137,10 +158,18 @@ func syncAllSources(workDir string, mode git.SyncMode) {
 
 	if hasErrors {
 		logger.Error("Some sources failed to sync")
-	} else if hasBranchCreated {
-		logger.Info("Sync completed with conflicts. Review created branches for manual resolution.")
+	} else if len(branchesCreated) > 0 {
+		// Show detailed instructions for conflict resolution
+		printConflictResolutionInstructions(branchesCreated)
+	} else if hasConflicts {
+		// Show instructions for detected conflicts
+		printDetectedConflictsInstructions(conflictResults)
 	} else {
-		logger.Info("Sync completed successfully. Total paths updated: %d", totalUpdated)
+		if mode == git.SyncModeDetect {
+			logger.Info("Check completed. %d paths updated (no conflicts detected)", totalUpdated)
+		} else {
+			logger.Info("Sync completed successfully. Total paths updated: %d", totalUpdated)
+		}
 	}
 }
 
@@ -150,7 +179,11 @@ func syncSingleSource(name string, workDir string, mode git.SyncMode) {
 		logger.Fatal("Source '%s' not found", name)
 	}
 
-	logger.Info("Syncing source '%s'...", name)
+	if mode == git.SyncModeDetect {
+		logger.Info("Checking source '%s' for updates...", name)
+	} else {
+		logger.Info("Syncing source '%s'...", name)
+	}
 	result := syncSource(source, workDir, mode)
 
 	if result.Error != nil {
@@ -163,6 +196,9 @@ func syncSingleSource(name string, workDir string, mode git.SyncMode) {
 		if result.MergeInstructions != "" {
 			fmt.Println(result.MergeInstructions)
 		}
+	} else if len(result.Conflicts) > 0 && mode == git.SyncModeDetect {
+		// Conflicts detected in detect mode
+		printDetectedConflictsInstructions([]git.SyncResult{result})
 	} else if result.HasChanges {
 		logger.Info("Successfully synced %s (%d paths updated)", result.SourceName, len(result.UpdatedPaths))
 	} else {
@@ -252,11 +288,59 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 	return result
 }
 
+// printDetectedConflictsInstructions prints instructions when conflicts are detected in detect mode
+func printDetectedConflictsInstructions(results []git.SyncResult) {
+	fmt.Println()
+	fmt.Println("\033[33m⚠ DIFFERENCES DETECTED\033[0m")
+	fmt.Println()
+
+	for _, result := range results {
+		fmt.Printf("  Source: \033[36m%s\033[0m\n", result.SourceName)
+		for _, conflict := range result.Conflicts {
+			fmt.Printf("    • %s\n", conflict.Path)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("\033[1mHow to proceed:\033[0m")
+	fmt.Println()
+	fmt.Println("  \033[32m--merge\033[0m                        Auto-merge (preserves local changes)")
+	fmt.Println("  \033[32m--merge --branch-on-conflict\033[0m   Merge with manual control via git branch")
+	fmt.Println("  \033[31m--force\033[0m                        Overwrite with remote version")
+	fmt.Println()
+}
+
+// printConflictResolutionInstructions prints instructions for resolving merge conflicts via branch
+func printConflictResolutionInstructions(results []git.SyncResult) {
+	fmt.Println()
+	fmt.Println("\033[33m⚠ MERGE CONFLICTS - Branch created for manual resolution\033[0m")
+	fmt.Println()
+
+	for _, result := range results {
+		fmt.Printf("  Source: \033[36m%s\033[0m\n", result.SourceName)
+		fmt.Printf("  Branch: \033[32m%s\033[0m\n", result.BranchCreated)
+		fmt.Println()
+		fmt.Println("  \033[1mTo resolve:\033[0m")
+		fmt.Printf("    git merge %s\n", result.BranchCreated)
+		fmt.Println("    # resolve conflicts in editor")
+		fmt.Println("    git add <files>")
+		fmt.Println("    git commit")
+		fmt.Println()
+		fmt.Println("  \033[1mOr accept all remote:\033[0m")
+		fmt.Printf("    git checkout %s -- .\n", result.BranchCreated)
+		fmt.Println()
+		fmt.Println("  \033[1mCleanup:\033[0m")
+		fmt.Printf("    git branch -d %s\n", result.BranchCreated)
+		fmt.Println()
+	}
+}
+
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
 	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all configured sources")
+	syncCmd.Flags().BoolVar(&mergeSync, "merge", false, "attempt to merge remote changes with local modifications")
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
 	syncCmd.Flags().BoolVar(&branchOnConflict, "branch-on-conflict", false,
-		"create a branch with remote changes when merge conflicts are detected")
+		"with --merge, create a branch with remote changes when merge conflicts are detected")
 }

@@ -25,9 +25,10 @@ import (
 type SyncMode int
 
 const (
-	SyncModeMerge  SyncMode = iota // Default: attempt three-way merge
+	SyncModeDetect SyncMode = iota // Default: only detect and report conflicts, no changes
+	SyncModeMerge                  // Attempt three-way merge
 	SyncModeForce                  // Force overwrite local changes
-	SyncModeBranch                 // Create branch on conflict for manual resolution
+	SyncModeBranch                 // Create branch on conflict for manual resolution (used with merge)
 )
 
 // Repository represents a Git repository wrapper
@@ -454,24 +455,24 @@ func (r *Repository) processPath(input processPathInput) (processPathResult, []h
 	result := processPathResult{}
 	var conflicts []hash.FileConflict
 
-	// Check for local changes
-	hasLocalChanges := r.hasLocalChanges(input.pathSpec, input.localPath, input.hasher, input.srcInfo.IsDir())
+	// Check if local content differs from remote
+	localDiffersFromRemote := r.contentDiffersFromRemote(input)
 
-	if !hasLocalChanges {
-		// No local changes - copy directly
-		if err := copyPath(input.sourcePath, input.localPath, input.pathSpec.Exclude); err != nil {
-			logger.Error("Failed to copy %s: %v", input.pathSpec.Include, err)
-			return result, conflicts
-		}
-
-		// Calculate new hashes
+	// If local and remote are identical, nothing to do
+	if !localDiffersFromRemote {
 		result.newHashes = r.calculateHashes(input.sourcePath, input.srcInfo.IsDir(), input.hasher, input.pathSpec.Exclude)
-		result.updated = true
+		result.updated = false
 		return result, conflicts
 	}
 
-	// Local changes detected
+	// Local differs from remote - handle based on mode
 	switch input.mode {
+	case SyncModeDetect:
+		// Detect mode - NEVER copy, only report differences
+		logger.Warning("⚠️  Differences detected in %s", input.pathSpec.Include)
+		r.showConflictDiff(input)
+		conflicts = r.getFileConflicts(input)
+
 	case SyncModeForce:
 		// Force mode - overwrite
 		logger.Info("🔧 Force mode: Overriding local changes in %s", input.pathSpec.Include)
@@ -483,20 +484,144 @@ func (r *Repository) processPath(input processPathInput) (processPathResult, []h
 		result.updated = true
 
 	case SyncModeMerge, SyncModeBranch:
-		// Try three-way merge
+		// Try three-way merge (preserves local changes when possible)
 		mergeResult, mergeConflicts := r.attemptMerge(input)
 
 		if len(mergeConflicts) > 0 {
 			conflicts = mergeConflicts
 			if input.mode == SyncModeMerge {
-				logger.Error("⚠️  Merge conflicts in %s - sync aborted for this path", input.pathSpec.Include)
+				// Show the conflict diff
+				r.showConflictDiff(input)
+				logger.Error("⚠️  Merge conflicts in %s - cannot auto-merge", input.pathSpec.Include)
+				logger.Info("💡 Use --branch-on-conflict to create a branch for manual resolution:")
+				logger.Info("   cherry-go sync --merge --branch-on-conflict")
 			}
 		} else if mergeResult.updated {
 			result = mergeResult
+			logger.Info("✓ Merged %s (local changes preserved)", input.pathSpec.Include)
 		}
 	}
 
 	return result, conflicts
+}
+
+// contentDiffersFromRemote checks if local content differs from remote content
+func (r *Repository) contentDiffersFromRemote(input processPathInput) bool {
+	if input.srcInfo.IsDir() {
+		// For directories, check each file
+		differs := false
+		filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return err
+			}
+			relPath, _ := filepath.Rel(input.sourcePath, path)
+			localPath := filepath.Join(input.localPath, relPath)
+
+			localContent, err := os.ReadFile(localPath)
+			if err != nil {
+				// Local doesn't exist - differs
+				differs = true
+				return filepath.SkipAll
+			}
+
+			remoteContent, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			if string(localContent) != string(remoteContent) {
+				differs = true
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		return differs
+	}
+
+	// For single file
+	localContent, err := os.ReadFile(input.localPath)
+	if err != nil {
+		// Local doesn't exist - differs
+		return true
+	}
+
+	remoteContent, err := os.ReadFile(input.sourcePath)
+	if err != nil {
+		return false
+	}
+
+	return string(localContent) != string(remoteContent)
+}
+
+// showConflictDiff shows the diff between local and remote for conflict detection
+func (r *Repository) showConflictDiff(input processPathInput) {
+	if input.srcInfo.IsDir() {
+		// For directories, show diff for each modified file
+		filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return err
+			}
+			relPath, _ := filepath.Rel(input.sourcePath, path)
+			localPath := filepath.Join(input.localPath, relPath)
+
+			if _, err := os.Stat(localPath); err == nil {
+				// Local file exists, check if different
+				localContent, _ := os.ReadFile(localPath)
+				remoteContent, _ := os.ReadFile(path)
+				if string(localContent) != string(remoteContent) {
+					merge.ShowDiffFromContent(localContent, remoteContent, relPath)
+				}
+			}
+			return nil
+		})
+	} else {
+		// For single file
+		localContent, err := os.ReadFile(input.localPath)
+		if err != nil {
+			return
+		}
+		remoteContent, err := os.ReadFile(input.sourcePath)
+		if err != nil {
+			return
+		}
+		if string(localContent) != string(remoteContent) {
+			merge.ShowDiffFromContent(localContent, remoteContent, filepath.Base(input.localPath))
+		}
+	}
+}
+
+// getFileConflicts returns file conflicts for the given path
+func (r *Repository) getFileConflicts(input processPathInput) []hash.FileConflict {
+	var conflicts []hash.FileConflict
+
+	if input.srcInfo.IsDir() {
+		filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return err
+			}
+			relPath, _ := filepath.Rel(input.sourcePath, path)
+			localPath := filepath.Join(input.localPath, relPath)
+
+			if _, err := os.Stat(localPath); err == nil {
+				localContent, _ := os.ReadFile(localPath)
+				remoteContent, _ := os.ReadFile(path)
+				if string(localContent) != string(remoteContent) {
+					conflicts = append(conflicts, hash.FileConflict{
+						Path: relPath,
+						Type: hash.ConflictTypeModified,
+					})
+				}
+			}
+			return nil
+		})
+	} else {
+		conflicts = append(conflicts, hash.FileConflict{
+			Path: filepath.Base(input.localPath),
+			Type: hash.ConflictTypeModified,
+		})
+	}
+
+	return conflicts
 }
 
 // hasLocalChanges checks if there are local changes in the given path
@@ -622,6 +747,8 @@ func (r *Repository) mergeDirectory(input processPathInput, baseContent map[stri
 				continue
 			}
 			// Files differ and no base - conflict
+			logger.Error("  - %s (no base content for merge)", relPath)
+			merge.ShowDiffFromContent(localContent, remoteContent, relPath)
 			conflicts = append(conflicts, hash.FileConflict{
 				Path: relPath,
 				Type: hash.ConflictTypeModified,
@@ -660,7 +787,8 @@ func (r *Repository) mergeDirectory(input processPathInput, baseContent map[stri
 		}
 
 		if mergeResult.HasConflict {
-			logger.Error("  - %s (merge conflict)", relPath)
+			logger.Error("  - %s (merge conflict - both local and remote modified)", relPath)
+			merge.ShowDiffFromContent(localContent, remoteContent, relPath)
 			conflicts = append(conflicts, hash.FileConflict{
 				Path: relPath,
 				Type: hash.ConflictTypeModified,
@@ -720,6 +848,8 @@ func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]
 			return result, conflicts
 		}
 		// Conflict - no base for merge
+		logger.Error("  - %s (no base content for merge)", fileName)
+		merge.ShowDiffFromContent(localContent, remoteContent, fileName)
 		conflicts = append(conflicts, hash.FileConflict{
 			Path: fileName,
 			Type: hash.ConflictTypeModified,
@@ -756,6 +886,8 @@ func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]
 	}
 
 	if mergeResult.HasConflict {
+		logger.Error("  - %s (merge conflict - both local and remote modified)", fileName)
+		merge.ShowDiffFromContent(localContent, remoteContent, fileName)
 		conflicts = append(conflicts, hash.FileConflict{
 			Path: fileName,
 			Type: hash.ConflictTypeModified,

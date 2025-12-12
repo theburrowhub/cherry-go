@@ -34,11 +34,14 @@ cherry-go status
 ### Syncing Changes
 
 ```bash
-# Sync all sources (with automatic merge)
+# Check for updates (default - detects conflicts without making changes)
 cherry-go sync --all
 
+# Sync with automatic merge
+cherry-go sync --all --merge
+
 # Sync specific source
-cherry-go sync awesome-go-utils
+cherry-go sync awesome-go-utils --merge
 
 # Dry run to see what would happen
 cherry-go sync --all --dry-run
@@ -46,41 +49,64 @@ cherry-go sync --all --dry-run
 # Force sync (overwrite local changes)
 cherry-go sync --all --force
 
-# Create branch on conflict for manual resolution
-cherry-go sync --all --branch-on-conflict
+# Merge with branch creation on conflict
+cherry-go sync --all --merge --branch-on-conflict
 ```
 
 ### Sync Modes
 
-Cherry-go supports three synchronization modes:
+Cherry-go supports four synchronization modes:
 
 | Mode | Flag | Behavior |
 |------|------|----------|
-| **Merge** (default) | none | Attempts three-way merge. Aborts if conflicts cannot be resolved |
+| **Detect** (default) | none | Detects and reports conflicts WITHOUT making changes |
+| **Merge** | `--merge` | Attempts automatic merge. Preserves local additions |
 | **Force** | `--force` | Overwrites all local changes |
-| **Branch** | `--branch-on-conflict` | Creates a git branch with remote changes for manual merge |
+| **Branch** | `--merge --branch-on-conflict` | Creates a git branch with remote changes if merge conflicts |
 
-#### Default Merge Mode
+#### Default Detect Mode
 
-By default, cherry-go attempts a three-way merge when local changes are detected:
+By default, cherry-go only detects and reports conflicts without making any changes:
 
-1. If no local changes: files are copied directly
-2. If local changes exist and can be auto-merged: merge is applied
-3. If merge conflicts occur: sync is aborted with an error
+1. If no local changes: files are copied directly (safe operation)
+2. If local changes exist: shows diff and reports conflict
+3. User decides how to proceed (merge, force, or manual)
 
 ```bash
 cherry-go sync mylib
 # Output:
-#   ✓ Merged utils/helper.go successfully
-#   ⚠️ Merge conflicts in config/settings.go - sync aborted
+#   ⚠️ Local changes detected in utils/helper.go
+#   [Shows diff]
+#   
+#   Choose how to proceed:
+#     1. MERGE: cherry-go sync mylib --merge
+#     2. FORCE: cherry-go sync mylib --force
 ```
+
+#### Merge Mode
+
+When `--merge` is used, cherry-go attempts automatic merging while **preserving local changes**:
+
+1. Local additions are kept
+2. Remote modifications are applied
+3. If both modified the same lines differently → conflict
+
+```bash
+cherry-go sync mylib --merge
+# Output:
+#   ✓ Merged utils/helper.go (local changes preserved)
+#   ⚠️ Merge conflicts in config/settings.go - cannot auto-merge
+#   💡 Use --branch-on-conflict to create a branch for manual resolution
+```
+
+If merge conflicts occur, cherry-go suggests using `--branch-on-conflict` for manual resolution.
 
 #### Branch on Conflict Mode
 
-When `--branch-on-conflict` is used, cherry-go creates a separate git branch with the remote changes if conflicts are detected:
+When `--merge --branch-on-conflict` is used, cherry-go creates a separate git branch with the remote changes if merge conflicts are detected:
 
 ```bash
-cherry-go sync mylib --branch-on-conflict
+cherry-go sync mylib --merge --branch-on-conflict
 # Output:
 #   ✓ Merged utils/helper.go successfully  
 #   ✗ Conflict in config/settings.go

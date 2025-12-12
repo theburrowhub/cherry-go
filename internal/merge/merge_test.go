@@ -126,6 +126,74 @@ func TestThreeWayMerge_OnlyRemoteChanges(t *testing.T) {
 	}
 }
 
+func TestPatchBasedMerge_PreservesLocalAdditions(t *testing.T) {
+	// This test verifies the key behavior: local additions are preserved
+	// while remote modifications are applied
+	base := []byte("# Test file\n\nOriginal line\n")
+	// Local added a new line
+	local := []byte("# Test file\n\nOriginal line\nLocal addition\n")
+	// Remote modified the original line
+	remote := []byte("# Test file\n\nModified line\n")
+
+	result, err := ThreeWayMerge(base, local, remote)
+	if err != nil {
+		t.Fatalf("ThreeWayMerge failed: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected merge to succeed, got conflict. Content:\n%s", result.Content)
+	}
+
+	content := string(result.Content)
+
+	// Should have the remote's modification
+	if !strings.Contains(content, "Modified line") {
+		t.Error("Should contain remote's modification")
+	}
+
+	// Should preserve local addition
+	if !strings.Contains(content, "Local addition") {
+		t.Error("Should preserve local addition")
+	}
+}
+
+func TestPatchBasedMerge_RemoteFixAndLocalAddition(t *testing.T) {
+	// Simulates the user's exact scenario:
+	// - Base has "Change made from source"
+	// - Local has "Change made from source" + "Change mada in project" (typo + addition)
+	// - Remote has "Change made in source" (fixed "from" to "in")
+	// Expected: "Change made in source" + "Change mada in project"
+	base := []byte("# Test file\n\nChange made from source\n")
+	local := []byte("# Test file\n\nChange made from source\nChange mada in project\n")
+	remote := []byte("# Test file\n\nChange made in source\n")
+
+	result, err := ThreeWayMerge(base, local, remote)
+	if err != nil {
+		t.Fatalf("ThreeWayMerge failed: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected merge to succeed, got conflict. Content:\n%s", result.Content)
+	}
+
+	content := string(result.Content)
+
+	// Should have remote's fix ("in" instead of "from")
+	if !strings.Contains(content, "Change made in source") {
+		t.Error("Should contain remote's fix 'Change made in source'")
+	}
+
+	// Should preserve local addition
+	if !strings.Contains(content, "Change mada in project") {
+		t.Error("Should preserve local addition 'Change mada in project'")
+	}
+
+	// Should NOT have the old version
+	if strings.Contains(content, "Change made from source") {
+		t.Error("Should not contain old version 'Change made from source'")
+	}
+}
+
 func TestMergeFile(t *testing.T) {
 	// Create temp directory
 	tempDir, err := os.MkdirTemp("", "merge-test-*")
