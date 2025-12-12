@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	syncAll   bool
-	forceSync bool
+	syncAll          bool
+	forceSync        bool
+	branchOnConflict bool
 )
 
 // syncCmd represents the sync command
@@ -23,8 +24,12 @@ var syncCmd = &cobra.Command{
 	Long: `Synchronize files from one or all tracked source repositories.
 This will pull the latest changes and update local files accordingly.
 
+By default, cherry-go will attempt a three-way merge when local changes
+are detected. If the merge succeeds, changes are applied automatically.
+If conflicts cannot be resolved, the sync is aborted.
+
 Examples:
-  # Sync all sources
+  # Sync all sources (with automatic merge)
   cherry-go sync --all
   
   # Sync specific source
@@ -34,7 +39,10 @@ Examples:
   cherry-go sync --all --dry-run
   
   # Force sync (override local changes)
-  cherry-go sync --all --force`,
+  cherry-go sync --all --force
+  
+  # Create branch on conflict for manual resolution
+  cherry-go sync --all --branch-on-conflict`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var sourceName string
 		if len(args) > 0 {
@@ -49,20 +57,38 @@ Examples:
 			logger.Fatal("Cannot specify both --all and a source name")
 		}
 
+		if forceSync && branchOnConflict {
+			logger.Fatal("Cannot specify both --force and --branch-on-conflict")
+		}
+
 		workDir, err := os.Getwd()
 		if err != nil {
 			logger.Fatal("Failed to get current directory: %v", err)
 		}
 
+		// Determine sync mode
+		mode := getSyncMode()
+
 		if syncAll {
-			syncAllSources(workDir)
+			syncAllSources(workDir, mode)
 		} else {
-			syncSingleSource(sourceName, workDir)
+			syncSingleSource(sourceName, workDir, mode)
 		}
 	},
 }
 
-func syncAllSources(workDir string) {
+// getSyncMode determines the sync mode based on flags
+func getSyncMode() git.SyncMode {
+	if forceSync {
+		return git.SyncModeForce
+	}
+	if branchOnConflict {
+		return git.SyncModeBranch
+	}
+	return git.SyncModeMerge // Default: attempt three-way merge
+}
+
+func syncAllSources(workDir string, mode git.SyncMode) {
 	if len(cfg.Sources) == 0 {
 		logger.Info("No sources configured to sync")
 		return
@@ -78,7 +104,7 @@ func syncAllSources(workDir string) {
 		wg.Add(1)
 		go func(src config.Source) {
 			defer wg.Done()
-			result := syncSource(&src, workDir)
+			result := syncSource(&src, workDir, mode)
 			results <- result
 		}(source)
 	}
@@ -92,11 +118,15 @@ func syncAllSources(workDir string) {
 	// Collect results
 	var totalUpdated int
 	var hasErrors bool
+	var hasBranchCreated bool
 
 	for result := range results {
 		if result.Error != nil {
 			logger.Error("Failed to sync %s: %v", result.SourceName, result.Error)
 			hasErrors = true
+		} else if result.BranchCreated != "" {
+			logger.Info("Conflict branch created for %s: %s", result.SourceName, result.BranchCreated)
+			hasBranchCreated = true
 		} else if result.HasChanges {
 			logger.Info("Successfully synced %s (%d paths updated)", result.SourceName, len(result.UpdatedPaths))
 			totalUpdated += len(result.UpdatedPaths)
@@ -107,32 +137,40 @@ func syncAllSources(workDir string) {
 
 	if hasErrors {
 		logger.Error("Some sources failed to sync")
+	} else if hasBranchCreated {
+		logger.Info("Sync completed with conflicts. Review created branches for manual resolution.")
 	} else {
 		logger.Info("Sync completed successfully. Total paths updated: %d", totalUpdated)
 	}
 }
 
-func syncSingleSource(name string, workDir string) {
+func syncSingleSource(name string, workDir string, mode git.SyncMode) {
 	source, exists := cfg.GetSource(name)
 	if !exists {
 		logger.Fatal("Source '%s' not found", name)
 	}
 
 	logger.Info("Syncing source '%s'...", name)
-	result := syncSource(source, workDir)
+	result := syncSource(source, workDir, mode)
 
 	if result.Error != nil {
 		logger.Fatal("Failed to sync %s: %v", result.SourceName, result.Error)
 	}
 
-	if result.HasChanges {
+	if result.BranchCreated != "" {
+		// Branch was created for conflict resolution
+		logger.Info("Conflict branch created: %s", result.BranchCreated)
+		if result.MergeInstructions != "" {
+			fmt.Println(result.MergeInstructions)
+		}
+	} else if result.HasChanges {
 		logger.Info("Successfully synced %s (%d paths updated)", result.SourceName, len(result.UpdatedPaths))
 	} else {
 		logger.Info("Source %s is up to date", result.SourceName)
 	}
 }
 
-func syncSource(source *config.Source, workDir string) git.SyncResult {
+func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.SyncResult {
 	result := git.SyncResult{
 		SourceName: source.Name,
 	}
@@ -158,22 +196,24 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 	}
 	result.CommitHash = commitHash
 
-	// Copy paths to local directory
-	updatedPaths, conflicts, err := repo.CopyPaths(forceSync)
+	// Copy paths to local directory with the specified mode
+	copyResult, err := repo.CopyPaths(mode, workDir)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to copy paths: %w", err)
 		return result
 	}
 
-	result.UpdatedPaths = updatedPaths
-	result.Conflicts = conflicts
-	result.HasChanges = len(updatedPaths) > 0
+	result.UpdatedPaths = copyResult.UpdatedPaths
+	result.Conflicts = copyResult.Conflicts
+	result.HasChanges = len(copyResult.UpdatedPaths) > 0
+	result.BranchCreated = copyResult.BranchCreated
+	result.MergeInstructions = copyResult.MergeInstructions
 
-	// Handle conflicts
-	if len(conflicts) > 0 && !forceSync {
-		logger.Error("Sync aborted due to conflicts. Use --force to override or resolve manually.")
+	// Handle conflicts in merge mode (abort)
+	if len(copyResult.Conflicts) > 0 && mode == git.SyncModeMerge {
+		logger.Error("Sync aborted due to merge conflicts. Use --force to override or --branch-on-conflict for manual resolution.")
 		if !logger.IsDryRun() {
-			result.Error = fmt.Errorf("conflicts detected, sync aborted")
+			result.Error = fmt.Errorf("merge conflicts detected, sync aborted")
 			return result
 		}
 	}
@@ -204,7 +244,7 @@ func syncSource(source *config.Source, workDir string) git.SyncResult {
 			source.Repository,
 			commitHash[:8])
 
-		if err := git.CreateCommit(workDir, commitMessage, updatedPaths); err != nil {
+		if err := git.CreateCommit(workDir, commitMessage, copyResult.UpdatedPaths); err != nil {
 			logger.Error("Failed to create commit: %v", err)
 		}
 	}
@@ -217,4 +257,6 @@ func init() {
 
 	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all configured sources")
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
+	syncCmd.Flags().BoolVar(&branchOnConflict, "branch-on-conflict", false,
+		"create a branch with remote changes when merge conflicts are detected")
 }

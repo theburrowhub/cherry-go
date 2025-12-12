@@ -5,6 +5,7 @@ import (
 	"cherry-go/internal/config"
 	"cherry-go/internal/hash"
 	"cherry-go/internal/logger"
+	"cherry-go/internal/merge"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,6 +21,15 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 )
 
+// SyncMode defines the synchronization mode
+type SyncMode int
+
+const (
+	SyncModeMerge  SyncMode = iota // Default: attempt three-way merge
+	SyncModeForce                  // Force overwrite local changes
+	SyncModeBranch                 // Create branch on conflict for manual resolution
+)
+
 // Repository represents a Git repository wrapper
 type Repository struct {
 	repo   *git.Repository
@@ -29,12 +39,22 @@ type Repository struct {
 
 // SyncResult represents the result of a sync operation
 type SyncResult struct {
-	SourceName   string
-	UpdatedPaths []string
-	CommitHash   string
-	HasChanges   bool
-	Conflicts    []hash.FileConflict
-	Error        error
+	SourceName        string
+	UpdatedPaths      []string
+	CommitHash        string
+	HasChanges        bool
+	Conflicts         []hash.FileConflict
+	BranchCreated     string // Name of conflict branch if created
+	MergeInstructions string // Instructions for manual merge
+	Error             error
+}
+
+// CopyResult represents the result of copying paths
+type CopyResult struct {
+	UpdatedPaths      []string
+	Conflicts         []hash.FileConflict
+	BranchCreated     string
+	MergeInstructions string
 }
 
 // NewRepository creates a new repository wrapper using global cache
@@ -303,10 +323,21 @@ func (r *Repository) GetLatestCommit() (string, error) {
 }
 
 // CopyPaths copies specified paths from the repository to local directory
-func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error) {
-	var updatedPaths []string
-	var allConflicts []hash.FileConflict
+// mode: SyncModeMerge (default), SyncModeForce, or SyncModeBranch
+// workDir: the local working directory (for branch creation)
+func (r *Repository) CopyPaths(mode SyncMode, workDir string) (*CopyResult, error) {
+	result := &CopyResult{}
 	hasher := hash.NewFileHasher()
+
+	// Initialize base content manager for three-way merge
+	baseManager, err := cache.NewBaseContentManager()
+	if err != nil {
+		logger.Debug("Failed to initialize base content manager: %v", err)
+		// Continue without base content - will fall back to hash-based conflict detection
+	}
+
+	// Collect files for potential branch creation
+	var conflictFiles map[string][]byte
 
 	for i, pathSpec := range r.source.Paths {
 		// Checkout the specific branch/tag for this path
@@ -314,6 +345,7 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 			logger.Error("Failed to checkout branch '%s' for %s: %v", pathSpec.Branch, pathSpec.Include, err)
 			continue
 		}
+
 		// Determine local path - use specified path or default to same as source
 		localPath := pathSpec.LocalPath
 		if localPath == "" {
@@ -328,77 +360,478 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 			continue
 		}
 
-		// For directories, we need to check conflicts in the target directory
-		// For files, we check the specific file location
-		var conflictCheckPath string
 		srcInfo, err := os.Stat(sourcePath)
 		if err != nil {
 			logger.Error("Failed to stat source path %s: %v", sourcePath, err)
 			continue
 		}
 
-		if srcInfo.IsDir() {
-			conflictCheckPath = localPath
-		} else {
-			conflictCheckPath = filepath.Dir(localPath)
-		}
+		// Process based on mode
+		pathResult, pathConflicts := r.processPath(processPathInput{
+			pathSpec:    pathSpec,
+			sourcePath:  sourcePath,
+			localPath:   localPath,
+			srcInfo:     srcInfo,
+			mode:        mode,
+			hasher:      hasher,
+			baseManager: baseManager,
+			workDir:     workDir,
+		})
 
-		// Check for conflicts with existing files
-		if pathSpec.Files != nil && len(pathSpec.Files) > 0 {
-			conflicts, err := hasher.VerifyFileIntegrity(conflictCheckPath, pathSpec.Files)
-			if err != nil {
-				logger.Error("Failed to verify file integrity for %s: %v", pathSpec.Include, err)
-			} else if len(conflicts) > 0 {
-				logger.Error("⚠️  Conflicts detected in %s:", pathSpec.Include)
-				for _, conflict := range conflicts {
-					logger.Error("  - %s", conflict.String())
-					allConflicts = append(allConflicts, conflict)
+		if len(pathConflicts) > 0 {
+			result.Conflicts = append(result.Conflicts, pathConflicts...)
+
+			// Collect conflict files for branch creation
+			if mode == SyncModeBranch {
+				if conflictFiles == nil {
+					conflictFiles = make(map[string][]byte)
 				}
-
-				if !force && !logger.IsDryRun() {
-					logger.Error("Skipping %s due to conflicts. Use --force to override or resolve conflicts manually.", pathSpec.Include)
-					continue
-				} else if force {
-					logger.Info("🔧 Force mode: Overriding local changes in %s", pathSpec.Include)
+				// Read remote files for branch
+				remoteFiles := r.readRemoteFiles(sourcePath, localPath, srcInfo.IsDir(), pathSpec.Exclude)
+				for k, v := range remoteFiles {
+					conflictFiles[k] = v
 				}
 			}
 		}
 
-		// Copy files/directories
-		if err := copyPath(sourcePath, localPath, pathSpec.Exclude); err != nil {
-			logger.Error("Failed to copy %s: %v", pathSpec.Include, err)
+		if pathResult.updated {
+			result.UpdatedPaths = append(result.UpdatedPaths, pathSpec.Include)
+
+			// Update hashes in path spec
+			r.source.Paths[i].Files = pathResult.newHashes
+
+			// Save base content for future merges
+			if baseManager != nil && !logger.IsDryRun() {
+				baseContent := r.readRemoteFiles(sourcePath, localPath, srcInfo.IsDir(), pathSpec.Exclude)
+				if err := baseManager.SaveSnapshot(r.source.Name, pathSpec.Include, baseContent); err != nil {
+					logger.Debug("Failed to save base content snapshot: %v", err)
+				}
+			}
+
+			logger.Info("Synced %s to %s", pathSpec.Include, localPath)
+		}
+	}
+
+	// Create conflict branch if needed
+	if mode == SyncModeBranch && len(result.Conflicts) > 0 && conflictFiles != nil && len(conflictFiles) > 0 {
+		branchPrefix := "cherry-go/sync"
+		if r.source.Name != "" {
+			branchPrefix = "cherry-go/sync"
+		}
+
+		branchResult, err := CreateConflictBranch(workDir, branchPrefix, r.source.Name, conflictFiles)
+		if err != nil {
+			logger.Error("Failed to create conflict branch: %v", err)
+		} else {
+			result.BranchCreated = branchResult.BranchName
+			result.MergeInstructions = GetMergeInstructions(branchResult)
+		}
+	}
+
+	return result, nil
+}
+
+// processPathInput contains input parameters for processPath
+type processPathInput struct {
+	pathSpec    config.PathSpec
+	sourcePath  string
+	localPath   string
+	srcInfo     os.FileInfo
+	mode        SyncMode
+	hasher      *hash.FileHasher
+	baseManager *cache.BaseContentManager
+	workDir     string
+}
+
+// processPathResult contains the result of processing a path
+type processPathResult struct {
+	updated   bool
+	newHashes map[string]string
+}
+
+// processPath processes a single path spec according to the sync mode
+func (r *Repository) processPath(input processPathInput) (processPathResult, []hash.FileConflict) {
+	result := processPathResult{}
+	var conflicts []hash.FileConflict
+
+	// Check for local changes
+	hasLocalChanges := r.hasLocalChanges(input.pathSpec, input.localPath, input.hasher, input.srcInfo.IsDir())
+
+	if !hasLocalChanges {
+		// No local changes - copy directly
+		if err := copyPath(input.sourcePath, input.localPath, input.pathSpec.Exclude); err != nil {
+			logger.Error("Failed to copy %s: %v", input.pathSpec.Include, err)
+			return result, conflicts
+		}
+
+		// Calculate new hashes
+		result.newHashes = r.calculateHashes(input.sourcePath, input.srcInfo.IsDir(), input.hasher, input.pathSpec.Exclude)
+		result.updated = true
+		return result, conflicts
+	}
+
+	// Local changes detected
+	switch input.mode {
+	case SyncModeForce:
+		// Force mode - overwrite
+		logger.Info("🔧 Force mode: Overriding local changes in %s", input.pathSpec.Include)
+		if err := copyPath(input.sourcePath, input.localPath, input.pathSpec.Exclude); err != nil {
+			logger.Error("Failed to copy %s: %v", input.pathSpec.Include, err)
+			return result, conflicts
+		}
+		result.newHashes = r.calculateHashes(input.sourcePath, input.srcInfo.IsDir(), input.hasher, input.pathSpec.Exclude)
+		result.updated = true
+
+	case SyncModeMerge, SyncModeBranch:
+		// Try three-way merge
+		mergeResult, mergeConflicts := r.attemptMerge(input)
+
+		if len(mergeConflicts) > 0 {
+			conflicts = mergeConflicts
+			if input.mode == SyncModeMerge {
+				logger.Error("⚠️  Merge conflicts in %s - sync aborted for this path", input.pathSpec.Include)
+			}
+		} else if mergeResult.updated {
+			result = mergeResult
+		}
+	}
+
+	return result, conflicts
+}
+
+// hasLocalChanges checks if there are local changes in the given path
+func (r *Repository) hasLocalChanges(pathSpec config.PathSpec, localPath string, hasher *hash.FileHasher, isDir bool) bool {
+	if pathSpec.Files == nil || len(pathSpec.Files) == 0 {
+		// No previous hashes - first sync
+		return false
+	}
+
+	var conflictCheckPath string
+	if isDir {
+		conflictCheckPath = localPath
+	} else {
+		conflictCheckPath = filepath.Dir(localPath)
+	}
+
+	conflicts, err := hasher.VerifyFileIntegrity(conflictCheckPath, pathSpec.Files)
+	if err != nil {
+		logger.Debug("Failed to verify file integrity: %v", err)
+		return false
+	}
+
+	return len(conflicts) > 0
+}
+
+// attemptMerge attempts a three-way merge for the given path
+func (r *Repository) attemptMerge(input processPathInput) (processPathResult, []hash.FileConflict) {
+	result := processPathResult{}
+	var conflicts []hash.FileConflict
+
+	// Check if we have base content for three-way merge
+	if input.baseManager == nil || !input.baseManager.HasSnapshot(r.source.Name, input.pathSpec.Include) {
+		// No base content - fall back to hash-based conflict detection
+		logger.Debug("No base content available for %s, falling back to conflict detection", input.pathSpec.Include)
+
+		// Report as conflict since we can't do proper merge
+		var conflictCheckPath string
+		if input.srcInfo.IsDir() {
+			conflictCheckPath = input.localPath
+		} else {
+			conflictCheckPath = filepath.Dir(input.localPath)
+		}
+
+		hashConflicts, _ := input.hasher.VerifyFileIntegrity(conflictCheckPath, input.pathSpec.Files)
+		for _, c := range hashConflicts {
+			conflicts = append(conflicts, c)
+			logger.Error("  - %s (no base content for merge)", c.Path)
+		}
+		return result, conflicts
+	}
+
+	// Get base content
+	baseContent, err := input.baseManager.GetSnapshot(r.source.Name, input.pathSpec.Include)
+	if err != nil {
+		logger.Error("Failed to get base content: %v", err)
+		return result, conflicts
+	}
+
+	// Perform merge
+	if input.srcInfo.IsDir() {
+		result, conflicts = r.mergeDirectory(input, baseContent)
+	} else {
+		result, conflicts = r.mergeFile(input, baseContent)
+	}
+
+	return result, conflicts
+}
+
+// mergeDirectory attempts to merge a directory
+func (r *Repository) mergeDirectory(input processPathInput, baseContent map[string][]byte) (processPathResult, []hash.FileConflict) {
+	result := processPathResult{newHashes: make(map[string]string)}
+	var conflicts []hash.FileConflict
+
+	// Get list of files to process
+	var files []string
+	err := filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		relPath, _ := filepath.Rel(input.sourcePath, path)
+		if !shouldExclude(relPath, input.pathSpec.Exclude) {
+			files = append(files, relPath)
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error("Failed to walk source directory: %v", err)
+		return result, conflicts
+	}
+
+	allMerged := true
+	for _, relPath := range files {
+		remotePath := filepath.Join(input.sourcePath, relPath)
+		localPath := filepath.Join(input.localPath, relPath)
+
+		// Read remote content
+		remoteContent, err := os.ReadFile(remotePath)
+		if err != nil {
+			logger.Error("Failed to read remote file %s: %v", relPath, err)
 			continue
 		}
 
-		// Calculate new hashes for tracking
-		var newHashes map[string]string
-
-		if srcInfo.IsDir() {
-			newHashes, err = hasher.HashDirectory(sourcePath, pathSpec.Exclude)
-		} else {
-			hash, hashErr := hasher.HashFile(sourcePath)
-			if hashErr == nil {
-				newHashes = map[string]string{
-					filepath.Base(sourcePath): hash,
+		// Check if local file exists
+		localContent, localErr := os.ReadFile(localPath)
+		if localErr != nil {
+			// Local file doesn't exist - just copy
+			if err := os.MkdirAll(filepath.Dir(localPath), 0755); err == nil {
+				if err := os.WriteFile(localPath, remoteContent, 0644); err != nil {
+					logger.Error("Failed to write file %s: %v", relPath, err)
 				}
-			} else {
-				err = hashErr
+			}
+			result.newHashes[relPath] = input.hasher.HashBytes(remoteContent)
+			continue
+		}
+
+		// Get base content for this file
+		base, hasBase := baseContent[relPath]
+
+		if !hasBase {
+			// No base - check if files are identical
+			if string(localContent) == string(remoteContent) {
+				result.newHashes[relPath] = input.hasher.HashBytes(remoteContent)
+				continue
+			}
+			// Files differ and no base - conflict
+			conflicts = append(conflicts, hash.FileConflict{
+				Path: relPath,
+				Type: hash.ConflictTypeModified,
+			})
+			allMerged = false
+			continue
+		}
+
+		// Check if local is unchanged from base
+		if string(localContent) == string(base) {
+			// Local unchanged - just take remote
+			if err := os.WriteFile(localPath, remoteContent, 0644); err != nil {
+				logger.Error("Failed to write file %s: %v", relPath, err)
+			}
+			result.newHashes[relPath] = input.hasher.HashBytes(remoteContent)
+			continue
+		}
+
+		// Check if remote is unchanged from base
+		if string(remoteContent) == string(base) {
+			// Remote unchanged - keep local
+			result.newHashes[relPath] = input.hasher.HashBytes(localContent)
+			continue
+		}
+
+		// Both changed - attempt three-way merge
+		mergeResult, err := merge.ThreeWayMerge(base, localContent, remoteContent)
+		if err != nil {
+			logger.Error("Failed to merge %s: %v", relPath, err)
+			conflicts = append(conflicts, hash.FileConflict{
+				Path: relPath,
+				Type: hash.ConflictTypeModified,
+			})
+			allMerged = false
+			continue
+		}
+
+		if mergeResult.HasConflict {
+			logger.Error("  - %s (merge conflict)", relPath)
+			conflicts = append(conflicts, hash.FileConflict{
+				Path: relPath,
+				Type: hash.ConflictTypeModified,
+			})
+			allMerged = false
+			continue
+		}
+
+		// Merge successful - write result
+		if !logger.IsDryRun() {
+			if err := os.WriteFile(localPath, mergeResult.Content, 0644); err != nil {
+				logger.Error("Failed to write merged file %s: %v", relPath, err)
+				continue
 			}
 		}
-
-		if err != nil {
-			logger.Error("Failed to calculate hashes for %s: %v", pathSpec.Include, err)
-		} else {
-			// Update path spec with new hashes
-			r.source.Paths[i].Files = newHashes
-			logger.Debug("Updated hashes for %s: %d files tracked", pathSpec.Include, len(newHashes))
-		}
-
-		updatedPaths = append(updatedPaths, pathSpec.Include)
-		logger.Info("Copied %s to %s", pathSpec.Include, localPath)
+		logger.Info("  ✓ Merged %s successfully", relPath)
+		result.newHashes[relPath] = input.hasher.HashBytes(mergeResult.Content)
 	}
 
-	return updatedPaths, allConflicts, nil
+	result.updated = allMerged && len(conflicts) == 0
+	return result, conflicts
+}
+
+// mergeFile attempts to merge a single file
+func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]byte) (processPathResult, []hash.FileConflict) {
+	result := processPathResult{newHashes: make(map[string]string)}
+	var conflicts []hash.FileConflict
+
+	fileName := filepath.Base(input.sourcePath)
+
+	// Read remote content
+	remoteContent, err := os.ReadFile(input.sourcePath)
+	if err != nil {
+		logger.Error("Failed to read remote file: %v", err)
+		return result, conflicts
+	}
+
+	// Read local content
+	localContent, err := os.ReadFile(input.localPath)
+	if err != nil {
+		// Local doesn't exist - just copy
+		if err := copyPath(input.sourcePath, input.localPath, nil); err != nil {
+			logger.Error("Failed to copy file: %v", err)
+		}
+		result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
+		result.updated = true
+		return result, conflicts
+	}
+
+	// Get base content
+	base, hasBase := baseContent[fileName]
+	if !hasBase {
+		// Check if files are identical
+		if string(localContent) == string(remoteContent) {
+			result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
+			result.updated = true
+			return result, conflicts
+		}
+		// Conflict - no base for merge
+		conflicts = append(conflicts, hash.FileConflict{
+			Path: fileName,
+			Type: hash.ConflictTypeModified,
+		})
+		return result, conflicts
+	}
+
+	// Check if local unchanged
+	if string(localContent) == string(base) {
+		if err := os.WriteFile(input.localPath, remoteContent, 0644); err != nil {
+			logger.Error("Failed to write file: %v", err)
+		}
+		result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
+		result.updated = true
+		return result, conflicts
+	}
+
+	// Check if remote unchanged
+	if string(remoteContent) == string(base) {
+		result.newHashes[fileName] = input.hasher.HashBytes(localContent)
+		result.updated = true
+		return result, conflicts
+	}
+
+	// Both changed - attempt merge
+	mergeResult, err := merge.ThreeWayMerge(base, localContent, remoteContent)
+	if err != nil {
+		logger.Error("Failed to merge: %v", err)
+		conflicts = append(conflicts, hash.FileConflict{
+			Path: fileName,
+			Type: hash.ConflictTypeModified,
+		})
+		return result, conflicts
+	}
+
+	if mergeResult.HasConflict {
+		conflicts = append(conflicts, hash.FileConflict{
+			Path: fileName,
+			Type: hash.ConflictTypeModified,
+		})
+		return result, conflicts
+	}
+
+	// Merge successful
+	if !logger.IsDryRun() {
+		if err := os.WriteFile(input.localPath, mergeResult.Content, 0644); err != nil {
+			logger.Error("Failed to write merged file: %v", err)
+			return result, conflicts
+		}
+	}
+	logger.Info("  ✓ Merged %s successfully", fileName)
+	result.newHashes[fileName] = input.hasher.HashBytes(mergeResult.Content)
+	result.updated = true
+	return result, conflicts
+}
+
+// calculateHashes calculates hashes for files in the given path
+func (r *Repository) calculateHashes(sourcePath string, isDir bool, hasher *hash.FileHasher, excludes []string) map[string]string {
+	var newHashes map[string]string
+	var err error
+
+	if isDir {
+		newHashes, err = hasher.HashDirectory(sourcePath, excludes)
+	} else {
+		h, hashErr := hasher.HashFile(sourcePath)
+		if hashErr == nil {
+			newHashes = map[string]string{
+				filepath.Base(sourcePath): h,
+			}
+		} else {
+			err = hashErr
+		}
+	}
+
+	if err != nil {
+		logger.Error("Failed to calculate hashes: %v", err)
+		return nil
+	}
+	return newHashes
+}
+
+// readRemoteFiles reads all files from the remote path into a map
+func (r *Repository) readRemoteFiles(sourcePath, localPath string, isDir bool, excludes []string) map[string][]byte {
+	files := make(map[string][]byte)
+
+	if !isDir {
+		content, err := os.ReadFile(sourcePath)
+		if err == nil {
+			// Use localPath for the key to match where it will be written
+			files[localPath] = content
+		}
+		return files
+	}
+
+	filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		relPath, _ := filepath.Rel(sourcePath, path)
+		if shouldExclude(relPath, excludes) {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err == nil {
+			// Use the full local path for branch creation
+			fullLocalPath := filepath.Join(localPath, relPath)
+			files[fullLocalPath] = content
+		}
+		return nil
+	})
+
+	return files
 }
 
 // checkoutBranch checks out a specific branch or tag

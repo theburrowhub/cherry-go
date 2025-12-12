@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cherry-go/internal/git"
 	"cherry-go/internal/logger"
 	"fmt"
 	"os"
@@ -20,8 +21,8 @@ func performInitialSync(repoName string) error {
 		return fmt.Errorf("repository '%s' not found", repoName)
 	}
 
-	// Perform sync for this specific source
-	result := syncSource(source, workDir)
+	// Perform sync for this specific source using default merge mode
+	result := syncSource(source, workDir, git.SyncModeMerge)
 
 	if result.Error != nil {
 		return result.Error
