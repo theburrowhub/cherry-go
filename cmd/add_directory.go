@@ -146,7 +146,7 @@ Examples:
 			LocalPath: localPath,
 			Branch:    dirBranch,
 			Exclude:   dirExcludes,
-			Files:     make(map[string]string), // Will be populated during sync
+			Files:     make(map[string]config.FileTraking), // Will be populated during sync
 		}
 
 		// Add the path spec to the source

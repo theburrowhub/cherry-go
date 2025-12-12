@@ -123,7 +123,7 @@ Examples:
 			Include:   filePath,
 			LocalPath: localPath,
 			Branch:    fileBranch,
-			Files:     make(map[string]string), // Will be populated during sync
+			Files:     make(map[string]config.FileTraking), // Will be populated during sync
 		}
 
 		// Add the path spec to the source

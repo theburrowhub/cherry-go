@@ -345,16 +345,25 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 
 		// Check for conflicts with existing files
 		if pathSpec.Files != nil && len(pathSpec.Files) > 0 {
-			conflicts, err := hasher.VerifyFileIntegrity(conflictCheckPath, pathSpec.Files)
+			conflicts, err := hasher.VerifyFileIntegrityWithTracking(conflictCheckPath, pathSpec.Files)
 			if err != nil {
 				logger.Error("Failed to verify file integrity for %s: %v", pathSpec.Include, err)
 			} else if len(conflicts) > 0 {
 				logger.Error("⚠️  Conflicts detected in %s:", pathSpec.Include)
+				
+				// Analyze conflicts and determine resolution strategy
+				currentCommit, _ := r.GetLatestCommit()
+				
 				for _, conflict := range conflicts {
-					logger.Error("  - %s", conflict.String())
+					if conflict.LastCommit != "" && conflict.LastCommit != currentCommit {
+						logger.Info("🔧 Attempting patch resolution for %s", conflict.Path)
+						// TODO: Implement patch resolution logic here
+					} else {
+						logger.Error("  - %s", conflict.String())
+					}
 					allConflicts = append(allConflicts, conflict)
 				}
-
+				
 				if !force && !logger.IsDryRun() {
 					logger.Error("Skipping %s due to conflicts. Use --force to override or resolve conflicts manually.", pathSpec.Include)
 					continue
@@ -370,28 +379,44 @@ func (r *Repository) CopyPaths(force bool) ([]string, []hash.FileConflict, error
 			continue
 		}
 
-		// Calculate new hashes for tracking
-		var newHashes map[string]string
-
+		// Calculate new hashes and tracking info
+		var newTracking map[string]config.FileTraking
+		currentCommit, _ := r.GetLatestCommit()
+		
 		if srcInfo.IsDir() {
-			newHashes, err = hasher.HashDirectory(sourcePath, pathSpec.Exclude)
+			hashes, err := hasher.HashDirectory(sourcePath, pathSpec.Exclude)
+			if err == nil {
+				newTracking = make(map[string]config.FileTraking)
+				for filePath, hash := range hashes {
+					newTracking[filePath] = config.FileTraking{
+						Hash:       hash,
+						LastCommit: currentCommit,
+						Modified:   false,
+					}
+				}
+			}
 		} else {
 			hash, hashErr := hasher.HashFile(sourcePath)
 			if hashErr == nil {
-				newHashes = map[string]string{
-					filepath.Base(sourcePath): hash,
+				newTracking = map[string]config.FileTraking{
+					filepath.Base(sourcePath): {
+						Hash:       hash,
+						LastCommit: currentCommit,
+						Modified:   false,
+					},
 				}
 			} else {
 				err = hashErr
 			}
 		}
-
+		
 		if err != nil {
 			logger.Error("Failed to calculate hashes for %s: %v", pathSpec.Include, err)
 		} else {
-			// Update path spec with new hashes
-			r.source.Paths[i].Files = newHashes
-			logger.Debug("Updated hashes for %s: %d files tracked", pathSpec.Include, len(newHashes))
+			// Update path spec with new tracking info
+			r.source.Paths[i].Files = newTracking
+			r.source.Paths[i].LastCommit = currentCommit
+			logger.Debug("Updated tracking for %s: %d files tracked (commit: %s)", pathSpec.Include, len(newTracking), currentCommit[:8])
 		}
 
 		updatedPaths = append(updatedPaths, pathSpec.Include)

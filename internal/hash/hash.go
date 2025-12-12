@@ -1,6 +1,7 @@
 package hash
 
 import (
+	"cherry-go/internal/config"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -111,17 +112,17 @@ func (fh *FileHasher) CompareHashes(oldHashes, newHashes map[string]string) (mod
 	return modified, added, removed
 }
 
-// VerifyFileIntegrity checks if local files match expected hashes
-func (fh *FileHasher) VerifyFileIntegrity(baseDir string, expectedHashes map[string]string) (conflicts []FileConflict, err error) {
-	for relPath, expectedHash := range expectedHashes {
+// VerifyFileIntegrity checks if local files match expected tracking info
+func (fh *FileHasher) VerifyFileIntegrityWithTracking(baseDir string, expectedFiles map[string]config.FileTraking) (conflicts []FileConflict, err error) {
+	for relPath, tracking := range expectedFiles {
 		fullPath := filepath.Join(baseDir, relPath)
-
+		
 		// Check if file exists
 		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 			conflicts = append(conflicts, FileConflict{
 				Path:         relPath,
 				Type:         ConflictTypeDeleted,
-				ExpectedHash: expectedHash,
+				ExpectedHash: tracking.Hash,
 				ActualHash:   "",
 			})
 			continue
@@ -134,17 +135,34 @@ func (fh *FileHasher) VerifyFileIntegrity(baseDir string, expectedHashes map[str
 		}
 
 		// Compare hashes
-		if actualHash != expectedHash {
+		if actualHash != tracking.Hash {
 			conflicts = append(conflicts, FileConflict{
 				Path:         relPath,
 				Type:         ConflictTypeModified,
-				ExpectedHash: expectedHash,
+				ExpectedHash: tracking.Hash,
 				ActualHash:   actualHash,
+				LastCommit:   tracking.LastCommit,
+				Modified:     tracking.Modified,
 			})
 		}
 	}
 
 	return conflicts, nil
+}
+
+// VerifyFileIntegrity checks if local files match expected hashes (legacy support)
+func (fh *FileHasher) VerifyFileIntegrity(baseDir string, expectedHashes map[string]string) (conflicts []FileConflict, err error) {
+	// Convert to new format for compatibility
+	tracking := make(map[string]config.FileTraking)
+	for path, hash := range expectedHashes {
+		tracking[path] = config.FileTraking{
+			Hash:       hash,
+			LastCommit: "",
+			Modified:   false,
+		}
+	}
+	
+	return fh.VerifyFileIntegrityWithTracking(baseDir, tracking)
 }
 
 // ConflictType represents the type of file conflict
@@ -162,6 +180,8 @@ type FileConflict struct {
 	Type         ConflictType
 	ExpectedHash string
 	ActualHash   string
+	LastCommit   string
+	Modified     bool
 }
 
 // String returns a human-readable description of the conflict
