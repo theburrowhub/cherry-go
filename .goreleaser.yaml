@@ -1,0 +1,124 @@
+# .goreleaser.yaml
+# Documentation: https://goreleaser.com
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cherry-go
+    binary: cherry-go
+    main: .
+    ldflags:
+      - "-s -w"
+      - "-X cherry-go/cmd.Version={{.Version}}"
+      - "-X cherry-go/cmd.CommitHash={{.ShortCommit}}"
+      - "-X cherry-go/cmd.BuildTime={{.Date}}"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Windows ARM64 is not common, skip it
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: cherry-go-archives
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - cherry-go
+    # Use zip for Windows
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+release:
+  github:
+    owner: theburrowhub
+    name: cherry-go
+  draft: false
+  prerelease: auto
+  name_template: "Release v{{ .Version }}"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# ========== DOCKER CONFIGURATION ==========
+dockers:
+  # AMD64
+  - id: cherry-go-amd64
+    ids:
+      - cherry-go
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/theburrowhub/cherry-go:{{ .Version }}-amd64"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Partial versioning tool for files from Git repositories"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+  # ARM64
+  - id: cherry-go-arm64
+    ids:
+      - cherry-go
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/theburrowhub/cherry-go:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.description=Partial versioning tool for files from Git repositories"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+# Multi-arch manifest (combines amd64 and arm64 into a single tag)
+docker_manifests:
+  - name_template: "ghcr.io/theburrowhub/cherry-go:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/theburrowhub/cherry-go:{{ .Version }}-amd64"
+      - "ghcr.io/theburrowhub/cherry-go:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/theburrowhub/cherry-go:latest"
+    image_templates:
+      - "ghcr.io/theburrowhub/cherry-go:{{ .Version }}-amd64"
+      - "ghcr.io/theburrowhub/cherry-go:{{ .Version }}-arm64"
+    # Only update :latest if not a prerelease
+    skip_push: auto
+
