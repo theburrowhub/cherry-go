@@ -117,6 +117,45 @@ go install cherry-go@latest
 make uninstall
 ```
 
+### Docker Installation
+
+Cherry-go is also available as a Docker image, which is useful for CI/CD pipelines or if you prefer containerized tools.
+
+```bash
+# Run directly with Docker
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest status
+
+# Sync all sources
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync --all
+```
+
+**Using an alias (recommended for daily use)**:
+
+Add this to your shell configuration (`~/.bashrc`, `~/.zshrc`, etc.):
+
+```bash
+# Basic alias
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest'
+
+# With SSH key support for private repositories
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace -v "$HOME/.ssh":/root/.ssh:ro ghcr.io/theburrowhub/cherry-go:latest'
+
+# With GitHub token support
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace -e GITHUB_TOKEN ghcr.io/theburrowhub/cherry-go:latest'
+```
+
+After adding the alias and reloading your shell (`source ~/.bashrc` or `source ~/.zshrc`), you can use cherry-go normally:
+
+```bash
+cherry-go init
+cherry-go add file https://github.com/user/repo.git/src/main.go
+cherry-go sync --all
+```
+
+> **Note**: The Docker image does not have access to the SSH agent. For private repositories, either mount your SSH keys or use token-based authentication.
+
+For more detailed Docker usage examples, see [docs/USAGE.md](docs/USAGE.md#docker-usage).
+
 ## Quick Start
 
 ### Super Simple (One-liner approach)
