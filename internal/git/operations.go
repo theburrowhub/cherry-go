@@ -26,11 +26,11 @@ import (
 type SyncMode int
 
 const (
-	SyncModeDetect SyncMode = iota // Default: only detect and report conflicts, no changes
-	SyncModeMerge                  // Attempt three-way merge
-	SyncModeForce                  // Force overwrite local changes
-	SyncModeBranch                 // Create branch on conflict for manual resolution (used with merge)
-	SyncModeMarkConflicts          // Write conflict markers to files without committing
+	SyncModeDetect        SyncMode = iota // Default: only detect and report conflicts, no changes
+	SyncModeMerge                         // Attempt three-way merge
+	SyncModeForce                         // Force overwrite local changes
+	SyncModeBranch                        // Create branch on conflict for manual resolution (used with merge)
+	SyncModeMarkConflicts                 // Write conflict markers to files without committing
 )
 
 // Repository represents a Git repository wrapper
@@ -925,7 +925,7 @@ func (r *Repository) writeConflictMarkers(input processPathInput, conflicts []ha
 		for _, conflict := range conflicts {
 			sourcePath := filepath.Join(input.sourcePath, conflict.Path)
 			localPath := filepath.Join(input.localPath, conflict.Path)
-			
+
 			if err := r.writeFileWithConflictMarkers(input.workDir, sourcePath, localPath, conflict.Path); err != nil {
 				return fmt.Errorf("failed to write conflict markers for %s: %w", conflict.Path, err)
 			}

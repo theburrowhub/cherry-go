@@ -66,13 +66,6 @@ Examples:
 	},
 }
 
-func getBranchOrDefault(branch string) string {
-	if branch == "" {
-		return "main"
-	}
-	return branch
-}
-
 func getAuthTypeDisplay(authType string) string {
 	if authType == "" {
 		return "none"

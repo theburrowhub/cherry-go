@@ -185,34 +185,6 @@ func TestGitMergeFile_LocalAdditionOnly(t *testing.T) {
 	}
 }
 
-func TestMergeFile(t *testing.T) {
-	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "merge-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Create test files
-	basePath := filepath.Join(tempDir, "base.txt")
-	localPath := filepath.Join(tempDir, "local.txt")
-	remotePath := filepath.Join(tempDir, "remote.txt")
-
-	os.WriteFile(basePath, []byte("original content\n"), 0644)
-	os.WriteFile(localPath, []byte("local content\n"), 0644)
-	os.WriteFile(remotePath, []byte("remote content\n"), 0644)
-
-	result, err := MergeFile(basePath, localPath, remotePath)
-	if err != nil {
-		t.Fatalf("MergeFile failed: %v", err)
-	}
-
-	// Both local and remote changed the same content, should conflict
-	if !result.HasConflict {
-		t.Error("Expected conflict when both sides modify same content")
-	}
-}
-
 func TestContainsConflictMarkers(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -269,5 +241,3 @@ func TestIsBinaryFile(t *testing.T) {
 		t.Error("Binary file should be detected as binary")
 	}
 }
-
-

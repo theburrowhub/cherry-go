@@ -94,35 +94,8 @@ func gitMergeFileDiff3(base, local, remote []byte) (MergeResult, error) {
 	}, nil
 }
 
-// MergeFile performs a three-way merge on files specified by paths
-func MergeFile(basePath, localPath, remotePath string) (MergeResult, error) {
-	base, err := os.ReadFile(basePath)
-	if err != nil {
-		return MergeResult{}, fmt.Errorf("failed to read base file: %w", err)
-	}
-
-	local, err := os.ReadFile(localPath)
-	if err != nil {
-		return MergeResult{}, fmt.Errorf("failed to read local file: %w", err)
-	}
-
-	remote, err := os.ReadFile(remotePath)
-	if err != nil {
-		return MergeResult{}, fmt.Errorf("failed to read remote file: %w", err)
-	}
-
-	return ThreeWayMerge(base, local, remote)
-}
-
-
-
-// fileExists checks if a file exists
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 // isBinaryFile checks if a file is binary by reading its first bytes
+// Note: Used primarily for testing
 func isBinaryFile(path string) bool {
 	file, err := os.Open(path)
 	if err != nil {
@@ -156,19 +129,6 @@ func ContainsConflictMarkers(content []byte) bool {
 	return false
 }
 
-// ShowDiff displays the difference between local and remote content (side by side)
-func ShowDiff(localPath, remotePath, fileName string) {
-	local, err1 := os.ReadFile(localPath)
-	remote, err2 := os.ReadFile(remotePath)
-
-	if err1 != nil || err2 != nil {
-		fmt.Printf("\n[Cannot show diff for %s]\n", fileName)
-		return
-	}
-
-	ShowDiffFromContent([]byte{}, local, remote, fileName)
-}
-
 // ShowDiffFromContent displays a three-way diff (base, local, remote) with merge preview
 // Only shows detailed diff if verbosity level >= 2, otherwise shows summary
 func ShowDiffFromContent(base, local, remote []byte, fileName string) {
@@ -187,19 +147,19 @@ func showConflictSummary(base, local, remote []byte, fileName string) {
 	if logger.GetVerbosityLevel() == 0 {
 		return
 	}
-	
+
 	// Perform merge to determine the type of conflict
 	mergeResult, _ := ThreeWayMerge(base, local, remote)
-	
+
 	baseLines := len(strings.Split(string(base), "\n"))
 	localLines := len(strings.Split(string(local), "\n"))
 	remoteLines := len(strings.Split(string(remote), "\n"))
-	
+
 	if mergeResult.Success {
-		fmt.Printf("\n  • %s: Auto-merge successful (%d lines in base, %d local, %d remote)\n", 
+		fmt.Printf("\n  • %s: Auto-merge successful (%d lines in base, %d local, %d remote)\n",
 			fileName, baseLines, localLines, remoteLines)
 	} else {
-		fmt.Printf("\n  • %s: Merge conflict detected (%d lines in base, %d local, %d remote)\n", 
+		fmt.Printf("\n  • %s: Merge conflict detected (%d lines in base, %d local, %d remote)\n",
 			fileName, baseLines, localLines, remoteLines)
 		fmt.Printf("    → Use -v or --verbose flag multiple times to see detailed diff\n")
 	}
@@ -210,7 +170,7 @@ func showConflictSummary(base, local, remote []byte, fileName string) {
 func showDiff3(base, local, remote []byte, fileName string) {
 	// Perform merge to get the result
 	mergeResult, _ := ThreeWayMerge(base, local, remote)
-	
+
 	baseLines := strings.Split(string(base), "\n")
 	localLines := strings.Split(string(local), "\n")
 	remoteLines := strings.Split(string(remote), "\n")
@@ -224,7 +184,7 @@ func showDiff3(base, local, remote []byte, fileName string) {
 	fmt.Println()
 	fmt.Printf("┌─── %s ───\n", fileName)
 	fmt.Printf("│\n")
-	
+
 	// Show merge status
 	if mergeResult.Success {
 		fmt.Printf("│  \033[32m✓ Auto-merge successful\033[0m\n")
@@ -232,12 +192,12 @@ func showDiff3(base, local, remote []byte, fileName string) {
 		fmt.Printf("│  \033[31m✗ Merge conflict detected\033[0m\n")
 	}
 	fmt.Printf("│\n")
-	
+
 	// Column headers for the 3 versions
 	fmt.Printf("│  \033[90m%-*s\033[0m%s", colWidth, "BASE (last sync)", separator)
 	fmt.Printf("\033[36m%-*s\033[0m%s", colWidth, "LOCAL (yours)", separator)
 	fmt.Printf("\033[33m%-*s\033[0m\n", colWidth, "REMOTE (source)")
-	
+
 	fmt.Printf("│  %s%s%s%s%s\n",
 		strings.Repeat("─", colWidth), "─┼─",
 		strings.Repeat("─", colWidth), "─┼─",
@@ -245,7 +205,7 @@ func showDiff3(base, local, remote []byte, fileName string) {
 
 	// Get max lines for the three versions
 	maxLines := max(len(baseLines), max(len(localLines), len(remoteLines)))
-	
+
 	// Limit output
 	maxDisplay := 30
 	displayLines := maxLines
@@ -287,29 +247,29 @@ func showDiff3(base, local, remote []byte, fileName string) {
 
 		// Print with appropriate formatting
 		fmt.Print("│  ")
-		
+
 		// BASE column (grey)
 		fmt.Printf("\033[90m%-*s\033[0m%s", colWidth, baseLine, separator)
-		
+
 		// LOCAL column (cyan if changed)
 		if localChanged {
 			fmt.Printf("\033[36m%-*s\033[0m%s", colWidth, localLine, separator)
 		} else {
 			fmt.Printf("%-*s%s", colWidth, localLine, separator)
 		}
-		
+
 		// REMOTE column (yellow if changed)
 		if remoteChanged {
 			fmt.Printf("\033[33m%-*s\033[0m", colWidth, remoteLine)
 		} else {
 			fmt.Printf("%-*s", colWidth, remoteLine)
 		}
-		
+
 		// Mark changed lines
 		if hasChange {
 			fmt.Print("  \033[31m◄\033[0m")
 		}
-		
+
 		fmt.Println()
 	}
 
@@ -320,7 +280,7 @@ func showDiff3(base, local, remote []byte, fileName string) {
 	// Separator before RESULT section
 	fmt.Printf("│\n")
 	fmt.Printf("│  %s\n", strings.Repeat("═", totalWidth))
-	
+
 	// RESULT header
 	if mergeResult.Success {
 		fmt.Printf("│  \033[32mRESULT (merged successfully)\033[0m\n")
@@ -338,7 +298,7 @@ func showDiff3(base, local, remote []byte, fileName string) {
 
 	for i := 0; i < displayResultLines; i++ {
 		resultLine := resultLines[i]
-		
+
 		// Truncate if needed
 		if len(resultLine) > totalWidth {
 			resultLine = resultLine[:totalWidth-3] + "..."

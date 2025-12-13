@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	configFile     string
-	dryRun         bool
-	verboseCount   int
-	cfg            *config.Config
+	configFile   string
+	dryRun       bool
+	verboseCount int
+	cfg          *config.Config
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -35,7 +35,7 @@ Features:
 		// Configure logger based on flags
 		logger.SetVerbosityLevel(verboseCount)
 		logger.SetDryRun(dryRun)
-		
+
 		if verboseCount > 0 {
 			if verboseCount == 1 {
 				logger.Debug("Verbose mode enabled")

@@ -100,10 +100,3 @@ func ParseURLPath(urlPath string) (repoURL string, filePath string) {
 	// If no URL detected, assume it's just a file path
 	return "", urlPath
 }
-
-// DetectRepoFromPath tries to detect which repository a path belongs to
-func DetectRepoFromPath(urlPath string, sources []interface{}) (string, error) {
-	// This will be implemented when we have the config.Source type available
-	// For now, return empty string to indicate auto-detection needed
-	return "", nil
-}

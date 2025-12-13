@@ -117,14 +117,14 @@ func GetMergeInstructions(result *ConflictBranchResult) string {
 	sb.WriteString("\n")
 	sb.WriteString("⚠️  Merge Conflicts - Remote changes saved to branch\n\n")
 	sb.WriteString(fmt.Sprintf("Branch: %s\n", result.BranchName))
-	
+
 	if len(result.FilesCommitted) > 0 {
 		sb.WriteString("\nFiles with conflicts:\n")
 		for _, file := range result.FilesCommitted {
 			sb.WriteString(fmt.Sprintf("  • %s\n", file))
 		}
 	}
-	
+
 	sb.WriteString("\nNext steps:\n")
 	sb.WriteString("Review the changes in the branch and merge when ready.\n")
 	sb.WriteString("The branch contains the remote version - adjust as needed before merging.\n\n")
@@ -136,9 +136,8 @@ func GetMergeInstructions(result *ConflictBranchResult) string {
 	return sb.String()
 }
 
-
-
 // DeleteConflictBranch deletes a conflict branch after successful resolution
+// Note: Currently used primarily for testing; may be used for cleanup in future versions
 func DeleteConflictBranch(workDir string, branchName string) error {
 	repo, err := git.PlainOpen(workDir)
 	if err != nil {

@@ -72,19 +72,19 @@ Examples:
 			logger.Fatal("Cannot specify both --force and --branch-on-conflict")
 		}
 
-	if branchOnConflict && !mergeSync {
-		logger.Fatal("--branch-on-conflict requires --merge flag")
-	}
+		if branchOnConflict && !mergeSync {
+			logger.Fatal("--branch-on-conflict requires --merge flag")
+		}
 
-	if markConflicts && !mergeSync {
-		logger.Fatal("--mark-conflicts requires --merge flag")
-	}
+		if markConflicts && !mergeSync {
+			logger.Fatal("--mark-conflicts requires --merge flag")
+		}
 
-	if markConflicts && branchOnConflict {
-		logger.Fatal("Cannot specify both --mark-conflicts and --branch-on-conflict")
-	}
+		if markConflicts && branchOnConflict {
+			logger.Fatal("Cannot specify both --mark-conflicts and --branch-on-conflict")
+		}
 
-	workDir, err := os.Getwd()
+		workDir, err := os.Getwd()
 		if err != nil {
 			logger.Fatal("Failed to get current directory: %v", err)
 		}
@@ -291,13 +291,13 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 	// Create commit if auto-commit is enabled and there are changes
 	// BUT skip commit if using --mark-conflicts mode with conflicts (user needs to resolve manually)
 	shouldCommit := cfg.Options.AutoCommit && result.HasChanges && !logger.IsDryRun()
-	
+
 	// Don't commit if mark-conflicts mode and there are conflicts
 	if mode == git.SyncModeMarkConflicts && len(copyResult.Conflicts) > 0 {
 		shouldCommit = false
 		logger.Info("Changes staged but not committed - resolve conflict markers and commit manually")
 	}
-	
+
 	if shouldCommit {
 		commitMessage := fmt.Sprintf("%s %s from %s (%s)",
 			cfg.Options.CommitPrefix,
@@ -325,12 +325,12 @@ func printDetectedConflictsInstructions(results []git.SyncResult) {
 				allConflicts = append(allConflicts, conflict.Path)
 			}
 		}
-		
+
 		conflictsList := strings.Join(allConflicts, ", ")
 		logger.Warning("⚠️  Differences detected in %s: %s. Use --merge (auto-merge), --merge --branch-on-conflict (branch), --merge --mark-conflicts (markers), or --force (overwrite)", sourceName, conflictsList)
 		return
 	}
-	
+
 	// Verbose output
 	fmt.Println()
 	fmt.Println("\033[33m⚠ DIFFERENCES DETECTED\033[0m")
@@ -362,14 +362,14 @@ func printConflictResolutionInstructions(results []git.SyncResult) {
 	for _, result := range results {
 		fmt.Printf("Source: \033[36m%s\033[0m\n", result.SourceName)
 		fmt.Printf("Branch: \033[32m%s\033[0m\n", result.BranchCreated)
-		
+
 		if len(result.Conflicts) > 0 {
 			fmt.Println("\nFiles with conflicts:")
 			for _, conflict := range result.Conflicts {
 				fmt.Printf("  • %s\n", conflict.Path)
 			}
 		}
-		
+
 		fmt.Println("\n\033[1mNext steps:\033[0m")
 		fmt.Println("Review the changes in the branch and merge when ready.")
 		fmt.Println("The branch contains the remote version - adjust as needed before merging.")

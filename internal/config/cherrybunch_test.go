@@ -10,7 +10,7 @@ func TestLoadCherryBunch(t *testing.T) {
 	// Create a temporary cherry bunch file
 	tmpDir := t.TempDir()
 	cbFile := filepath.Join(tmpDir, "test.cherrybunch")
-	
+
 	cbContent := `name: test-bunch
 description: Test cherry bunch
 version: "1.0"
@@ -150,7 +150,7 @@ repository: https://github.com/test/repo.git`,
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cb, err := LoadCherryBunchFromData([]byte(tt.content))
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Expected error but got none")
@@ -175,7 +175,7 @@ repository: https://github.com/test/repo.git`,
 
 func TestApplyCherryBunch(t *testing.T) {
 	config := DefaultConfig()
-	
+
 	cb := &CherryBunch{
 		Name:        "test-apply",
 		Description: "Test application",
@@ -294,11 +294,11 @@ func TestIsURL(t *testing.T) {
 
 // Helper function
 func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || 
-		(len(s) > len(substr) && 
-		 (s[:len(substr)] == substr || 
-		  s[len(s)-len(substr):] == substr || 
-		  findSubstring(s, substr))))
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > len(substr) &&
+			(s[:len(substr)] == substr ||
+				s[len(s)-len(substr):] == substr ||
+				findSubstring(s, substr))))
 }
 
 func findSubstring(s, substr string) bool {

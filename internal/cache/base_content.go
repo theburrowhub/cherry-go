@@ -32,6 +32,7 @@ func NewBaseContentManager() (*BaseContentManager, error) {
 }
 
 // GetBaseDir returns the base content directory path
+// Note: Used primarily for testing and debugging
 func (m *BaseContentManager) GetBaseDir() string {
 	return m.baseDir
 }
@@ -115,6 +116,7 @@ func (m *BaseContentManager) GetSnapshot(sourceName, pathSpec string) (map[strin
 }
 
 // GetFileContent retrieves a single file from the snapshot
+// Note: Used primarily for testing and debugging
 func (m *BaseContentManager) GetFileContent(sourceName, pathSpec, relPath string) ([]byte, error) {
 	snapshotPath := m.getSnapshotPath(sourceName, pathSpec)
 	filePath := filepath.Join(snapshotPath, relPath)
@@ -139,18 +141,21 @@ func (m *BaseContentManager) HasSnapshot(sourceName, pathSpec string) bool {
 }
 
 // DeleteSnapshot removes a snapshot for a source/path
+// Note: Used primarily for testing and cleanup operations
 func (m *BaseContentManager) DeleteSnapshot(sourceName, pathSpec string) error {
 	snapshotPath := m.getSnapshotPath(sourceName, pathSpec)
 	return os.RemoveAll(snapshotPath)
 }
 
 // DeleteSourceSnapshots removes all snapshots for a source
+// Note: Used primarily for cleanup operations when removing a source
 func (m *BaseContentManager) DeleteSourceSnapshots(sourceName string) error {
 	sourcePath := filepath.Join(m.baseDir, sourceName)
 	return os.RemoveAll(sourcePath)
 }
 
 // CleanOrphanedSnapshots removes snapshots for sources that no longer exist
+// Note: Used primarily for cache maintenance operations
 func (m *BaseContentManager) CleanOrphanedSnapshots(validSources []string) error {
 	entries, err := os.ReadDir(m.baseDir)
 	if err != nil {
