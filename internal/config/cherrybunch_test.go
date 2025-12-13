@@ -249,7 +249,7 @@ func TestSaveCherryBunch(t *testing.T) {
 	}
 
 	// Verify file was created
-	if _, err := os.Stat(cbFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(cbFile); os.IsNotExist(statErr) {
 		t.Errorf("Cherry bunch file was not created")
 	}
 

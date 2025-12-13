@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -111,7 +112,9 @@ func TestBaseContentManager_DeleteSnapshot(t *testing.T) {
 	}
 
 	// Save and verify
-	manager.SaveSnapshot(sourceName, pathSpec, files)
+	if err := manager.SaveSnapshot(sourceName, pathSpec, files); err != nil {
+		t.Fatalf("SaveSnapshot failed: %v", err)
+	}
 	if !manager.HasSnapshot(sourceName, pathSpec) {
 		t.Fatal("Snapshot should exist after saving")
 	}
@@ -141,9 +144,15 @@ func TestBaseContentManager_DeleteSourceSnapshots(t *testing.T) {
 	files := map[string][]byte{"file.go": []byte("content")}
 
 	// Save multiple snapshots for same source
-	manager.SaveSnapshot(sourceName, "path1", files)
-	manager.SaveSnapshot(sourceName, "path2", files)
-	manager.SaveSnapshot("other-source", "path1", files)
+	if err := manager.SaveSnapshot(sourceName, "path1", files); err != nil {
+		t.Fatalf("SaveSnapshot failed: %v", err)
+	}
+	if err := manager.SaveSnapshot(sourceName, "path2", files); err != nil {
+		t.Fatalf("SaveSnapshot failed: %v", err)
+	}
+	if err := manager.SaveSnapshot("other-source", "path1", files); err != nil {
+		t.Fatalf("SaveSnapshot failed: %v", err)
+	}
 
 	// Delete all snapshots for source
 	err = manager.DeleteSourceSnapshots(sourceName)
@@ -287,7 +296,7 @@ func TestBaseContentManager_PathHashing(t *testing.T) {
 
 	// Verify paths are under source directory
 	expectedBase := filepath.Join(tempDir, "source")
-	if !filepath.HasPrefix(path1, expectedBase) {
+	if !strings.HasPrefix(path1, expectedBase) {
 		t.Errorf("Snapshot path should be under source directory: %s", path1)
 	}
 }

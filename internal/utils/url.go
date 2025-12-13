@@ -8,12 +8,8 @@ import (
 func ExtractRepoName(repoURL string) string {
 	// Remove protocol prefixes
 	url := repoURL
-	if strings.HasPrefix(url, "https://") {
-		url = strings.TrimPrefix(url, "https://")
-	}
-	if strings.HasPrefix(url, "http://") {
-		url = strings.TrimPrefix(url, "http://")
-	}
+	url = strings.TrimPrefix(url, "https://")
+	url = strings.TrimPrefix(url, "http://")
 	if strings.HasPrefix(url, "git@") {
 		url = strings.TrimPrefix(url, "git@")
 		// Convert git@host:owner/repo.git to host/owner/repo.git

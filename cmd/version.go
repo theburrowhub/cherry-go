@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"cherry-go/internal/logger"
-	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +26,7 @@ var versionCmd = &cobra.Command{
 		logger.Info("Build time: %s", BuildTime)
 
 		if verboseCount > 0 {
-			logger.Info("Go version: %s", fmt.Sprintf("%s", "go1.21+"))
+			logger.Info("Go version: %s", "go1.21+")
 			logger.Info("Platform: %s", "cross-platform")
 		}
 	},

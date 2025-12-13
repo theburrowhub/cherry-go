@@ -2,11 +2,6 @@ package git
 
 import (
 	"bytes"
-	"cherry-go/internal/cache"
-	"cherry-go/internal/config"
-	"cherry-go/internal/hash"
-	"cherry-go/internal/logger"
-	"cherry-go/internal/merge"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,6 +15,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+
+	"cherry-go/internal/cache"
+	"cherry-go/internal/config"
+	"cherry-go/internal/hash"
+	"cherry-go/internal/logger"
+	"cherry-go/internal/merge"
 )
 
 // SyncMode defines the synchronization mode
@@ -536,7 +537,7 @@ func (r *Repository) contentDiffersFromRemote(input processPathInput) bool {
 	if input.srcInfo.IsDir() {
 		// For directories, check each file
 		differs := false
-		filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {
 				return err
 			}
@@ -583,7 +584,7 @@ func (r *Repository) contentDiffersFromRemote(input processPathInput) bool {
 func (r *Repository) showConflictDiff(input processPathInput) {
 	if input.srcInfo.IsDir() {
 		// For directories, show diff for each modified file
-		filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {
 				return err
 			}
@@ -625,7 +626,7 @@ func (r *Repository) getFileConflicts(input processPathInput) []hash.FileConflic
 	var conflicts []hash.FileConflict
 
 	if input.srcInfo.IsDir() {
-		filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(input.sourcePath, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {
 				return err
 			}
@@ -679,7 +680,7 @@ func (r *Repository) hasLocalChanges(pathSpec config.PathSpec, localPath string,
 
 // attemptMerge attempts a three-way merge using git history as base
 func (r *Repository) attemptMerge(input processPathInput) (processPathResult, []hash.FileConflict) {
-	result := processPathResult{}
+	var result processPathResult
 	var conflicts []hash.FileConflict
 
 	// Perform merge based on file type
@@ -824,8 +825,8 @@ func (r *Repository) mergeFile(input processPathInput) (processPathResult, []has
 	if err != nil {
 		// Local doesn't exist - just copy
 		if !logger.IsDryRun() {
-			if err := copyPath(input.sourcePath, input.localPath, nil); err != nil {
-				logger.Error("Failed to copy file: %v", err)
+			if copyErr := copyPath(input.sourcePath, input.localPath, nil); copyErr != nil {
+				logger.Error("Failed to copy file: %v", copyErr)
 			}
 		}
 		result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
@@ -1129,8 +1130,8 @@ func copyDir(src, dst string, excludes []string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(dst, srcInfo.Mode()); mkdirErr != nil {
+		return mkdirErr
 	}
 
 	entries, err := os.ReadDir(src)
@@ -1195,8 +1196,8 @@ func CreateCommit(workDir string, message string, updatedPaths []string) error {
 
 	// Add all updated paths
 	for _, path := range updatedPaths {
-		if _, err := workTree.Add(path); err != nil {
-			logger.Error("Failed to add %s: %v", path, err)
+		if _, addErr := workTree.Add(path); addErr != nil {
+			logger.Error("Failed to add %s: %v", path, addErr)
 		}
 	}
 

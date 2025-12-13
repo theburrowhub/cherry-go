@@ -2,12 +2,13 @@ package merge
 
 import (
 	"bytes"
-	"cherry-go/internal/logger"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"cherry-go/internal/logger"
 )
 
 // MergeResult represents the result of a merge operation
@@ -65,9 +66,15 @@ func gitMergeFileDiff3(base, local, remote []byte) (MergeResult, error) {
 	localFile := filepath.Join(tempDir, "local")
 	remoteFile := filepath.Join(tempDir, "remote")
 
-	os.WriteFile(baseFile, base, 0644)
-	os.WriteFile(localFile, local, 0644)
-	os.WriteFile(remoteFile, remote, 0644)
+	if err := os.WriteFile(baseFile, base, 0644); err != nil {
+		return MergeResult{}, fmt.Errorf("failed to write base file: %w", err)
+	}
+	if err := os.WriteFile(localFile, local, 0644); err != nil {
+		return MergeResult{}, fmt.Errorf("failed to write local file: %w", err)
+	}
+	if err := os.WriteFile(remoteFile, remote, 0644); err != nil {
+		return MergeResult{}, fmt.Errorf("failed to write remote file: %w", err)
+	}
 
 	cmd := exec.Command("git", "merge-file", "-p", "--diff3",
 		"-L", "LOCAL",

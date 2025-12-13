@@ -27,7 +27,7 @@ var cherryBunchCmd = &cobra.Command{
 Cherry bunches are YAML template files that describe sets of files and directories
 to synchronize from repositories. This command helps create and manage these templates.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 

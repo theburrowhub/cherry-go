@@ -235,8 +235,8 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 	}
 
 	// Pull latest changes
-	if err := repo.Pull(); err != nil {
-		result.Error = fmt.Errorf("failed to pull changes: %w", err)
+	if pullErr := repo.Pull(); pullErr != nil {
+		result.Error = fmt.Errorf("failed to pull changes: %w", pullErr)
 		return result
 	}
 

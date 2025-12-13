@@ -66,10 +66,14 @@ func TestCreateConflictBranch_Integration(t *testing.T) {
 	// Configure git user for commits
 	cmd = exec.Command("git", "config", "user.email", "test@test.com")
 	cmd.Dir = tempDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to config git email: %v", err)
+	}
 	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = tempDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to config git name: %v", err)
+	}
 
 	// Create initial file and commit
 	initialFile := filepath.Join(tempDir, "file.txt")
@@ -77,7 +81,9 @@ func TestCreateConflictBranch_Integration(t *testing.T) {
 
 	cmd = exec.Command("git", "add", ".")
 	cmd.Dir = tempDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to add files: %v", err)
+	}
 
 	cmd = exec.Command("git", "commit", "-m", "initial commit")
 	cmd.Dir = tempDir
@@ -201,13 +207,17 @@ func TestListConflictBranches(t *testing.T) {
 	}
 
 	// Create a non-conflict branch
-	worktree.Checkout(&git.CheckoutOptions{
+	if err := worktree.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName("feature/test"),
 		Create: true,
-	})
-	worktree.Checkout(&git.CheckoutOptions{
+	}); err != nil {
+		t.Fatalf("Failed to checkout feature branch: %v", err)
+	}
+	if err := worktree.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.ReferenceName("refs/heads/" + result1.OriginalBranch),
-	})
+	}); err != nil {
+		t.Fatalf("Failed to checkout original branch: %v", err)
+	}
 
 	// List conflict branches
 	branches, err := ListConflictBranches(tempDir, "cherry-go/sync")
@@ -266,8 +276,12 @@ func TestDeleteAllConflictBranches(t *testing.T) {
 	files := map[string][]byte{
 		"conflict.txt": []byte("conflict"),
 	}
-	CreateConflictBranch(tempDir, "cherry-go/sync", "source1", files)
-	CreateConflictBranch(tempDir, "cherry-go/sync", "source2", files)
+	if _, err := CreateConflictBranch(tempDir, "cherry-go/sync", "source1", files); err != nil {
+		t.Fatalf("Failed to create conflict branch 1: %v", err)
+	}
+	if _, err := CreateConflictBranch(tempDir, "cherry-go/sync", "source2", files); err != nil {
+		t.Fatalf("Failed to create conflict branch 2: %v", err)
+	}
 
 	// Delete all conflict branches
 	deleted, err := DeleteAllConflictBranches(tempDir, "cherry-go/sync")

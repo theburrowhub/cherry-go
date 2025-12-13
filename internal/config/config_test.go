@@ -126,8 +126,8 @@ func TestSaveAndLoad(t *testing.T) {
 	cfg.AddSource(source)
 
 	// Save configuration
-	if err := cfg.Save(configPath); err != nil {
-		t.Fatalf("Failed to save config: %v", err)
+	if saveErr := cfg.Save(configPath); saveErr != nil {
+		t.Fatalf("Failed to save config: %v", saveErr)
 	}
 
 	// Load configuration

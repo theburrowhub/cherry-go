@@ -12,8 +12,6 @@ import (
 )
 
 var (
-	cherryBunchURL  string
-	cherryBunchFile string
 	cherryBunchName string
 )
 

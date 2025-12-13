@@ -72,9 +72,9 @@ func CreateConflictBranch(workDir string, branchPrefix string, sourceName string
 		}
 
 		// Stage the file
-		if _, err := worktree.Add(relPath); err != nil {
+		if _, addErr := worktree.Add(relPath); addErr != nil {
 			_ = worktree.Checkout(&git.CheckoutOptions{Branch: head.Name()})
-			return nil, fmt.Errorf("failed to stage file %s: %w", relPath, err)
+			return nil, fmt.Errorf("failed to stage file %s: %w", relPath, addErr)
 		}
 
 		committedFiles = append(committedFiles, relPath)

@@ -29,10 +29,10 @@ Examples:
   cherry-go add file --repo mylib --path src/main.go --local-path internal/main.go
   
   # Add a directory from that repository  
-  cherry-go add directory --repo mylib --path src/ --local-path internal/mylib/`,
+	cherry-go add directory --repo mylib --path src/ --local-path internal/mylib/`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Show help when add is called without subcommands
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 
