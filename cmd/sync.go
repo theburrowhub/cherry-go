@@ -6,6 +6,7 @@ import (
 	"cherry-go/internal/logger"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ var (
 	forceSync        bool
 	mergeSync        bool
 	branchOnConflict bool
+	markConflicts    bool
 )
 
 // syncCmd represents the sync command
@@ -43,6 +45,9 @@ Examples:
   # Merge with branch creation on conflict
   cherry-go sync --all --merge --branch-on-conflict
   
+  # Merge with conflict markers for manual resolution
+  cherry-go sync --all --merge --mark-conflicts
+  
   # Dry run to preview changes
   cherry-go sync --all --dry-run`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -67,11 +72,19 @@ Examples:
 			logger.Fatal("Cannot specify both --force and --branch-on-conflict")
 		}
 
-		if branchOnConflict && !mergeSync {
-			logger.Fatal("--branch-on-conflict requires --merge flag")
-		}
+	if branchOnConflict && !mergeSync {
+		logger.Fatal("--branch-on-conflict requires --merge flag")
+	}
 
-		workDir, err := os.Getwd()
+	if markConflicts && !mergeSync {
+		logger.Fatal("--mark-conflicts requires --merge flag")
+	}
+
+	if markConflicts && branchOnConflict {
+		logger.Fatal("Cannot specify both --mark-conflicts and --branch-on-conflict")
+	}
+
+	workDir, err := os.Getwd()
 		if err != nil {
 			logger.Fatal("Failed to get current directory: %v", err)
 		}
@@ -95,6 +108,9 @@ func getSyncMode() git.SyncMode {
 	if mergeSync {
 		if branchOnConflict {
 			return git.SyncModeBranch
+		}
+		if markConflicts {
+			return git.SyncModeMarkConflicts
 		}
 		return git.SyncModeMerge
 	}
@@ -247,7 +263,7 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 
 	// Handle conflicts in merge mode (abort)
 	if len(copyResult.Conflicts) > 0 && mode == git.SyncModeMerge {
-		logger.Error("Sync aborted due to merge conflicts. Use --force to override or --branch-on-conflict for manual resolution.")
+		logger.Error("Sync aborted due to merge conflicts. Use --force to override, --branch-on-conflict, or --mark-conflicts for manual resolution.")
 		if !logger.IsDryRun() {
 			result.Error = fmt.Errorf("merge conflicts detected, sync aborted")
 			return result
@@ -273,7 +289,16 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 	}
 
 	// Create commit if auto-commit is enabled and there are changes
-	if cfg.Options.AutoCommit && result.HasChanges && !logger.IsDryRun() {
+	// BUT skip commit if using --mark-conflicts mode with conflicts (user needs to resolve manually)
+	shouldCommit := cfg.Options.AutoCommit && result.HasChanges && !logger.IsDryRun()
+	
+	// Don't commit if mark-conflicts mode and there are conflicts
+	if mode == git.SyncModeMarkConflicts && len(copyResult.Conflicts) > 0 {
+		shouldCommit = false
+		logger.Info("Changes staged but not committed - resolve conflict markers and commit manually")
+	}
+	
+	if shouldCommit {
 		commitMessage := fmt.Sprintf("%s %s from %s (%s)",
 			cfg.Options.CommitPrefix,
 			source.Name,
@@ -290,6 +315,23 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 
 // printDetectedConflictsInstructions prints instructions when conflicts are detected in detect mode
 func printDetectedConflictsInstructions(results []git.SyncResult) {
+	// If verbosity is 0, print compact single-line format
+	if logger.GetVerbosityLevel() == 0 {
+		var allConflicts []string
+		var sourceName string
+		for _, result := range results {
+			sourceName = result.SourceName
+			for _, conflict := range result.Conflicts {
+				allConflicts = append(allConflicts, conflict.Path)
+			}
+		}
+		
+		conflictsList := strings.Join(allConflicts, ", ")
+		logger.Warning("⚠️  Differences detected in %s: %s. Use --merge (auto-merge), --merge --branch-on-conflict (branch), --merge --mark-conflicts (markers), or --force (overwrite)", sourceName, conflictsList)
+		return
+	}
+	
+	// Verbose output
 	fmt.Println()
 	fmt.Println("\033[33m⚠ DIFFERENCES DETECTED\033[0m")
 	fmt.Println()
@@ -306,6 +348,7 @@ func printDetectedConflictsInstructions(results []git.SyncResult) {
 	fmt.Println()
 	fmt.Println("  \033[32m--merge\033[0m                        Auto-merge (preserves local changes)")
 	fmt.Println("  \033[32m--merge --branch-on-conflict\033[0m   Merge with manual control via git branch")
+	fmt.Println("  \033[32m--merge --mark-conflicts\033[0m       Write conflict markers to files for manual resolution")
 	fmt.Println("  \033[31m--force\033[0m                        Overwrite with remote version")
 	fmt.Println()
 }
@@ -313,24 +356,27 @@ func printDetectedConflictsInstructions(results []git.SyncResult) {
 // printConflictResolutionInstructions prints instructions for resolving merge conflicts via branch
 func printConflictResolutionInstructions(results []git.SyncResult) {
 	fmt.Println()
-	fmt.Println("\033[33m⚠ MERGE CONFLICTS - Branch created for manual resolution\033[0m")
+	fmt.Println("\033[33m⚠️  Merge Conflicts - Remote changes saved to branch\033[0m")
 	fmt.Println()
 
 	for _, result := range results {
-		fmt.Printf("  Source: \033[36m%s\033[0m\n", result.SourceName)
-		fmt.Printf("  Branch: \033[32m%s\033[0m\n", result.BranchCreated)
+		fmt.Printf("Source: \033[36m%s\033[0m\n", result.SourceName)
+		fmt.Printf("Branch: \033[32m%s\033[0m\n", result.BranchCreated)
+		
+		if len(result.Conflicts) > 0 {
+			fmt.Println("\nFiles with conflicts:")
+			for _, conflict := range result.Conflicts {
+				fmt.Printf("  • %s\n", conflict.Path)
+			}
+		}
+		
+		fmt.Println("\n\033[1mNext steps:\033[0m")
+		fmt.Println("Review the changes in the branch and merge when ready.")
+		fmt.Println("The branch contains the remote version - adjust as needed before merging.")
 		fmt.Println()
-		fmt.Println("  \033[1mTo resolve:\033[0m")
-		fmt.Printf("    git merge %s\n", result.BranchCreated)
-		fmt.Println("    # resolve conflicts in editor")
-		fmt.Println("    git add <files>")
-		fmt.Println("    git commit")
-		fmt.Println()
-		fmt.Println("  \033[1mOr accept all remote:\033[0m")
-		fmt.Printf("    git checkout %s -- .\n", result.BranchCreated)
-		fmt.Println()
-		fmt.Println("  \033[1mCleanup:\033[0m")
-		fmt.Printf("    git branch -d %s\n", result.BranchCreated)
+		fmt.Printf("  git diff %s              # Review changes\n", result.BranchCreated)
+		fmt.Printf("  git merge %s             # Merge when ready\n", result.BranchCreated)
+		fmt.Printf("  git branch -d %s   # Delete branch after merge\n", result.BranchCreated)
 		fmt.Println()
 	}
 }
@@ -343,4 +389,6 @@ func init() {
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
 	syncCmd.Flags().BoolVar(&branchOnConflict, "branch-on-conflict", false,
 		"with --merge, create a branch with remote changes when merge conflicts are detected")
+	syncCmd.Flags().BoolVar(&markConflicts, "mark-conflicts", false,
+		"with --merge, write conflict markers to files for manual resolution (no commit)")
 }
