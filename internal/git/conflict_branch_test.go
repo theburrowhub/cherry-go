@@ -6,6 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 func TestGetMergeInstructions(t *testing.T) {
@@ -151,5 +156,136 @@ func TestCreateConflictBranch_NotGitRepo(t *testing.T) {
 	_, err = CreateConflictBranch(tempDir, "prefix", "source", files)
 	if err == nil {
 		t.Error("CreateConflictBranch should fail in non-git directory")
+	}
+}
+
+func TestListConflictBranches(t *testing.T) {
+	// Create temp directory
+	tempDir, err := os.MkdirTemp("", "list-branches-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize git repo
+	repo, err := git.PlainInit(tempDir, false)
+	if err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Create initial commit
+	worktree, _ := repo.Worktree()
+	testFile := filepath.Join(tempDir, "test.txt")
+	os.WriteFile(testFile, []byte("test"), 0644)
+	worktree.Add("test.txt")
+	worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@test.com",
+			When:  time.Now(),
+		},
+	})
+
+	// Create some conflict branches
+	files := map[string][]byte{
+		"conflict1.txt": []byte("conflict 1"),
+	}
+	result1, err := CreateConflictBranch(tempDir, "cherry-go/sync", "source1", files)
+	if err != nil {
+		t.Fatalf("Failed to create conflict branch 1: %v", err)
+	}
+
+	result2, err := CreateConflictBranch(tempDir, "cherry-go/sync", "source2", files)
+	if err != nil {
+		t.Fatalf("Failed to create conflict branch 2: %v", err)
+	}
+
+	// Create a non-conflict branch
+	worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName("feature/test"),
+		Create: true,
+	})
+	worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.ReferenceName("refs/heads/" + result1.OriginalBranch),
+	})
+
+	// List conflict branches
+	branches, err := ListConflictBranches(tempDir, "cherry-go/sync")
+	if err != nil {
+		t.Fatalf("ListConflictBranches failed: %v", err)
+	}
+
+	if len(branches) != 2 {
+		t.Errorf("Expected 2 conflict branches, got %d", len(branches))
+	}
+
+	// Verify branch names
+	found1, found2 := false, false
+	for _, branch := range branches {
+		if branch == result1.BranchName {
+			found1 = true
+		}
+		if branch == result2.BranchName {
+			found2 = true
+		}
+	}
+
+	if !found1 || !found2 {
+		t.Error("Not all expected conflict branches were found")
+	}
+}
+
+func TestDeleteAllConflictBranches(t *testing.T) {
+	// Create temp directory
+	tempDir, err := os.MkdirTemp("", "delete-all-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize git repo
+	repo, err := git.PlainInit(tempDir, false)
+	if err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Create initial commit
+	worktree, _ := repo.Worktree()
+	testFile := filepath.Join(tempDir, "test.txt")
+	os.WriteFile(testFile, []byte("test"), 0644)
+	worktree.Add("test.txt")
+	worktree.Commit("initial", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@test.com",
+			When:  time.Now(),
+		},
+	})
+
+	// Create some conflict branches
+	files := map[string][]byte{
+		"conflict.txt": []byte("conflict"),
+	}
+	CreateConflictBranch(tempDir, "cherry-go/sync", "source1", files)
+	CreateConflictBranch(tempDir, "cherry-go/sync", "source2", files)
+
+	// Delete all conflict branches
+	deleted, err := DeleteAllConflictBranches(tempDir, "cherry-go/sync")
+	if err != nil {
+		t.Fatalf("DeleteAllConflictBranches failed: %v", err)
+	}
+
+	if len(deleted) != 2 {
+		t.Errorf("Expected 2 deleted branches, got %d", len(deleted))
+	}
+
+	// Verify branches are deleted
+	branches, err := ListConflictBranches(tempDir, "cherry-go/sync")
+	if err != nil {
+		t.Fatalf("ListConflictBranches failed: %v", err)
+	}
+
+	if len(branches) != 0 {
+		t.Errorf("Expected 0 conflict branches after deletion, got %d", len(branches))
 	}
 }

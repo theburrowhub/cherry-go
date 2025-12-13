@@ -137,7 +137,6 @@ func GetMergeInstructions(result *ConflictBranchResult) string {
 }
 
 // DeleteConflictBranch deletes a conflict branch after successful resolution
-// Note: Currently used primarily for testing; may be used for cleanup in future versions
 func DeleteConflictBranch(workDir string, branchName string) error {
 	repo, err := git.PlainOpen(workDir)
 	if err != nil {
@@ -151,4 +150,57 @@ func DeleteConflictBranch(workDir string, branchName string) error {
 	}
 
 	return nil
+}
+
+// ListConflictBranches lists all conflict branches matching the given prefix
+func ListConflictBranches(workDir string, branchPrefix string) ([]string, error) {
+	repo, err := git.PlainOpen(workDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	branches, err := repo.Branches()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list branches: %w", err)
+	}
+
+	var conflictBranches []string
+	err = branches.ForEach(func(ref *plumbing.Reference) error {
+		branchName := ref.Name().Short()
+		if strings.HasPrefix(branchName, branchPrefix+"/") {
+			conflictBranches = append(conflictBranches, branchName)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate branches: %w", err)
+	}
+
+	return conflictBranches, nil
+}
+
+// DeleteAllConflictBranches deletes all conflict branches matching the given prefix
+func DeleteAllConflictBranches(workDir string, branchPrefix string) ([]string, error) {
+	branches, err := ListConflictBranches(workDir, branchPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var deleted []string
+	var errors []string
+
+	for _, branchName := range branches {
+		if err := DeleteConflictBranch(workDir, branchName); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", branchName, err))
+		} else {
+			deleted = append(deleted, branchName)
+		}
+	}
+
+	if len(errors) > 0 {
+		return deleted, fmt.Errorf("failed to delete some branches: %s", strings.Join(errors, ", "))
+	}
+
+	return deleted, nil
 }

@@ -321,6 +321,46 @@ cherry-go cache clean
 - **Efficient**: No duplicate downloads across projects
 - **Automatic**: Managed transparently by cherry-go
 
+### `cleanup` - Clean up conflict branches
+
+Clean up conflict branches that were created during sync operations with conflicts:
+
+```bash
+# List all conflict branches
+cherry-go cleanup
+
+# Delete all conflict branches
+cherry-go cleanup --all
+
+# Dry-run mode
+cherry-go cleanup --all --dry-run
+```
+
+When cherry-go encounters conflicts during sync with `--merge --branch-on-conflict`, it creates branches with the prefix configured in your `.cherry-go.yaml` (default: `cherry-go/sync/`). This command helps you clean up these branches after you've resolved the conflicts.
+
+**Examples**:
+
+```bash
+# View all conflict branches
+cherry-go cleanup
+
+# Output:
+# Found 2 conflict branch(es):
+#   1. cherry-go/sync/mylib-20241212-120000
+#   2. cherry-go/sync/utils-20241213-143000
+#
+# To delete all conflict branches, run:
+#   cherry-go cleanup --all
+
+# Delete all conflict branches
+cherry-go cleanup --all
+
+# Output:
+# ✅ Successfully deleted 2 conflict branch(es)
+#   ✓ cherry-go/sync/mylib-20241212-120000
+#   ✓ cherry-go/sync/utils-20241213-143000
+```
+
 ### `status` - Show status
 
 Display current configuration and tracking status:
