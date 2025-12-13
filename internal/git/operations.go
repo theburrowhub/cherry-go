@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"cherry-go/internal/cache"
 	"cherry-go/internal/config"
 	"cherry-go/internal/hash"
@@ -29,6 +30,7 @@ const (
 	SyncModeMerge                  // Attempt three-way merge
 	SyncModeForce                  // Force overwrite local changes
 	SyncModeBranch                 // Create branch on conflict for manual resolution (used with merge)
+	SyncModeMarkConflicts          // Write conflict markers to files without committing
 )
 
 // Repository represents a Git repository wrapper
@@ -330,13 +332,6 @@ func (r *Repository) CopyPaths(mode SyncMode, workDir string) (*CopyResult, erro
 	result := &CopyResult{}
 	hasher := hash.NewFileHasher()
 
-	// Initialize base content manager for three-way merge
-	baseManager, err := cache.NewBaseContentManager()
-	if err != nil {
-		logger.Debug("Failed to initialize base content manager: %v", err)
-		// Continue without base content - will fall back to hash-based conflict detection
-	}
-
 	// Collect files for potential branch creation
 	var conflictFiles map[string][]byte
 
@@ -369,14 +364,13 @@ func (r *Repository) CopyPaths(mode SyncMode, workDir string) (*CopyResult, erro
 
 		// Process based on mode
 		pathResult, pathConflicts := r.processPath(processPathInput{
-			pathSpec:    pathSpec,
-			sourcePath:  sourcePath,
-			localPath:   localPath,
-			srcInfo:     srcInfo,
-			mode:        mode,
-			hasher:      hasher,
-			baseManager: baseManager,
-			workDir:     workDir,
+			pathSpec:   pathSpec,
+			sourcePath: sourcePath,
+			localPath:  localPath,
+			srcInfo:    srcInfo,
+			mode:       mode,
+			hasher:     hasher,
+			workDir:    workDir,
 		})
 
 		if len(pathConflicts) > 0 {
@@ -400,14 +394,6 @@ func (r *Repository) CopyPaths(mode SyncMode, workDir string) (*CopyResult, erro
 
 			// Update hashes in path spec
 			r.source.Paths[i].Files = pathResult.newHashes
-
-			// Save base content for future merges
-			if baseManager != nil && !logger.IsDryRun() {
-				baseContent := r.readRemoteFiles(sourcePath, localPath, srcInfo.IsDir(), pathSpec.Exclude)
-				if err := baseManager.SaveSnapshot(r.source.Name, pathSpec.Include, baseContent); err != nil {
-					logger.Debug("Failed to save base content snapshot: %v", err)
-				}
-			}
 
 			logger.Info("Synced %s to %s", pathSpec.Include, localPath)
 		}
@@ -434,14 +420,13 @@ func (r *Repository) CopyPaths(mode SyncMode, workDir string) (*CopyResult, erro
 
 // processPathInput contains input parameters for processPath
 type processPathInput struct {
-	pathSpec    config.PathSpec
-	sourcePath  string
-	localPath   string
-	srcInfo     os.FileInfo
-	mode        SyncMode
-	hasher      *hash.FileHasher
-	baseManager *cache.BaseContentManager
-	workDir     string
+	pathSpec   config.PathSpec
+	sourcePath string
+	localPath  string
+	srcInfo    os.FileInfo
+	mode       SyncMode
+	hasher     *hash.FileHasher
+	workDir    string
 }
 
 // processPathResult contains the result of processing a path
@@ -454,6 +439,9 @@ type processPathResult struct {
 func (r *Repository) processPath(input processPathInput) (processPathResult, []hash.FileConflict) {
 	result := processPathResult{}
 	var conflicts []hash.FileConflict
+
+	// Check if local path exists
+	localExists := r.localPathExists(input.localPath)
 
 	// Check if local content differs from remote
 	localDiffersFromRemote := r.contentDiffersFromRemote(input)
@@ -468,10 +456,21 @@ func (r *Repository) processPath(input processPathInput) (processPathResult, []h
 	// Local differs from remote - handle based on mode
 	switch input.mode {
 	case SyncModeDetect:
-		// Detect mode - NEVER copy, only report differences
-		logger.Warning("⚠️  Differences detected in %s", input.pathSpec.Include)
-		r.showConflictDiff(input)
-		conflicts = r.getFileConflicts(input)
+		// Detect mode - only report differences if local exists
+		// If local doesn't exist, it's a new file, not a difference
+		if localExists {
+			logger.Warning("⚠️  Differences detected in %s", input.pathSpec.Include)
+			r.showConflictDiff(input)
+			conflicts = r.getFileConflicts(input)
+		} else {
+			// Local doesn't exist - this is a new file, just copy it
+			if err := copyPath(input.sourcePath, input.localPath, input.pathSpec.Exclude); err != nil {
+				logger.Error("Failed to copy %s: %v", input.pathSpec.Include, err)
+				return result, conflicts
+			}
+			result.newHashes = r.calculateHashes(input.sourcePath, input.srcInfo.IsDir(), input.hasher, input.pathSpec.Exclude)
+			result.updated = true
+		}
 
 	case SyncModeForce:
 		// Force mode - overwrite
@@ -493,9 +492,30 @@ func (r *Repository) processPath(input processPathInput) (processPathResult, []h
 				// Show the conflict diff
 				r.showConflictDiff(input)
 				logger.Error("⚠️  Merge conflicts in %s - cannot auto-merge", input.pathSpec.Include)
-				logger.Info("💡 Use --branch-on-conflict to create a branch for manual resolution:")
-				logger.Info("   cherry-go sync --merge --branch-on-conflict")
+				logger.Info("💡 Options for manual resolution:")
+				logger.Info("   cherry-go sync --merge --mark-conflicts     (write conflict markers)")
+				logger.Info("   cherry-go sync --merge --branch-on-conflict (create git branch)")
 			}
+		} else if mergeResult.updated {
+			result = mergeResult
+			logger.Info("✓ Merged %s (local changes preserved)", input.pathSpec.Include)
+		}
+
+	case SyncModeMarkConflicts:
+		// Try three-way merge and write conflict markers if conflicts occur
+		mergeResult, mergeConflicts := r.attemptMerge(input)
+
+		if len(mergeConflicts) > 0 {
+			// Write files with conflict markers
+			conflicts = mergeConflicts
+			if err := r.writeConflictMarkers(input, mergeConflicts); err != nil {
+				logger.Error("Failed to write conflict markers for %s: %v", input.pathSpec.Include, err)
+				return result, conflicts
+			}
+			// Calculate hashes for the files with conflict markers (local path, since we wrote there)
+			result.newHashes = r.calculateHashes(input.localPath, input.srcInfo.IsDir(), input.hasher, input.pathSpec.Exclude)
+			result.updated = true
+			logger.Warning("⚠️  Conflict markers written to %s - resolve manually and commit", input.pathSpec.Include)
 		} else if mergeResult.updated {
 			result = mergeResult
 			logger.Info("✓ Merged %s (local changes preserved)", input.pathSpec.Include)
@@ -503,6 +523,12 @@ func (r *Repository) processPath(input processPathInput) (processPathResult, []h
 	}
 
 	return result, conflicts
+}
+
+// localPathExists checks if the local path exists
+func (r *Repository) localPathExists(localPath string) bool {
+	_, err := os.Stat(localPath)
+	return err == nil
 }
 
 // contentDiffersFromRemote checks if local content differs from remote content
@@ -569,7 +595,9 @@ func (r *Repository) showConflictDiff(input processPathInput) {
 				localContent, _ := os.ReadFile(localPath)
 				remoteContent, _ := os.ReadFile(path)
 				if string(localContent) != string(remoteContent) {
-					merge.ShowDiffFromContent(localContent, remoteContent, relPath)
+					// Get base from git history
+					base, _ := getBaseContentFromGitHistory(input.workDir, localPath)
+					merge.ShowDiffFromContent(base, localContent, remoteContent, relPath)
 				}
 			}
 			return nil
@@ -585,7 +613,9 @@ func (r *Repository) showConflictDiff(input processPathInput) {
 			return
 		}
 		if string(localContent) != string(remoteContent) {
-			merge.ShowDiffFromContent(localContent, remoteContent, filepath.Base(input.localPath))
+			// Get base from git history
+			base, _ := getBaseContentFromGitHistory(input.workDir, input.localPath)
+			merge.ShowDiffFromContent(base, localContent, remoteContent, filepath.Base(input.localPath))
 		}
 	}
 }
@@ -647,51 +677,23 @@ func (r *Repository) hasLocalChanges(pathSpec config.PathSpec, localPath string,
 	return len(conflicts) > 0
 }
 
-// attemptMerge attempts a three-way merge for the given path
+// attemptMerge attempts a three-way merge using git history as base
 func (r *Repository) attemptMerge(input processPathInput) (processPathResult, []hash.FileConflict) {
 	result := processPathResult{}
 	var conflicts []hash.FileConflict
 
-	// Check if we have base content for three-way merge
-	if input.baseManager == nil || !input.baseManager.HasSnapshot(r.source.Name, input.pathSpec.Include) {
-		// No base content - fall back to hash-based conflict detection
-		logger.Debug("No base content available for %s, falling back to conflict detection", input.pathSpec.Include)
-
-		// Report as conflict since we can't do proper merge
-		var conflictCheckPath string
-		if input.srcInfo.IsDir() {
-			conflictCheckPath = input.localPath
-		} else {
-			conflictCheckPath = filepath.Dir(input.localPath)
-		}
-
-		hashConflicts, _ := input.hasher.VerifyFileIntegrity(conflictCheckPath, input.pathSpec.Files)
-		for _, c := range hashConflicts {
-			conflicts = append(conflicts, c)
-			logger.Error("  - %s (no base content for merge)", c.Path)
-		}
-		return result, conflicts
-	}
-
-	// Get base content
-	baseContent, err := input.baseManager.GetSnapshot(r.source.Name, input.pathSpec.Include)
-	if err != nil {
-		logger.Error("Failed to get base content: %v", err)
-		return result, conflicts
-	}
-
-	// Perform merge
+	// Perform merge based on file type
 	if input.srcInfo.IsDir() {
-		result, conflicts = r.mergeDirectory(input, baseContent)
+		result, conflicts = r.mergeDirectory(input)
 	} else {
-		result, conflicts = r.mergeFile(input, baseContent)
+		result, conflicts = r.mergeFile(input)
 	}
 
 	return result, conflicts
 }
 
-// mergeDirectory attempts to merge a directory
-func (r *Repository) mergeDirectory(input processPathInput, baseContent map[string][]byte) (processPathResult, []hash.FileConflict) {
+// mergeDirectory attempts to merge a directory using git history
+func (r *Repository) mergeDirectory(input processPathInput) (processPathResult, []hash.FileConflict) {
 	result := processPathResult{newHashes: make(map[string]string)}
 	var conflicts []hash.FileConflict
 
@@ -729,6 +731,27 @@ func (r *Repository) mergeDirectory(input processPathInput, baseContent map[stri
 		if localErr != nil {
 			// Local file doesn't exist - just copy
 			if err := os.MkdirAll(filepath.Dir(localPath), 0755); err == nil {
+				if !logger.IsDryRun() {
+					if err := os.WriteFile(localPath, remoteContent, 0644); err != nil {
+						logger.Error("Failed to write file %s: %v", relPath, err)
+					}
+				}
+			}
+			result.newHashes[relPath] = input.hasher.HashBytes(remoteContent)
+			continue
+		}
+
+		// Get base content from git history
+		base, err := getBaseContentFromGitHistory(input.workDir, localPath)
+		if err != nil {
+			logger.Debug("Failed to get base from git history for %s: %v", relPath, err)
+			base = []byte{} // Use empty base
+		}
+
+		// Check if local is unchanged from base
+		if bytes.Equal(localContent, base) {
+			// Local unchanged - just take remote
+			if !logger.IsDryRun() {
 				if err := os.WriteFile(localPath, remoteContent, 0644); err != nil {
 					logger.Error("Failed to write file %s: %v", relPath, err)
 				}
@@ -737,38 +760,8 @@ func (r *Repository) mergeDirectory(input processPathInput, baseContent map[stri
 			continue
 		}
 
-		// Get base content for this file
-		base, hasBase := baseContent[relPath]
-
-		if !hasBase {
-			// No base - check if files are identical
-			if string(localContent) == string(remoteContent) {
-				result.newHashes[relPath] = input.hasher.HashBytes(remoteContent)
-				continue
-			}
-			// Files differ and no base - conflict
-			logger.Error("  - %s (no base content for merge)", relPath)
-			merge.ShowDiffFromContent(localContent, remoteContent, relPath)
-			conflicts = append(conflicts, hash.FileConflict{
-				Path: relPath,
-				Type: hash.ConflictTypeModified,
-			})
-			allMerged = false
-			continue
-		}
-
-		// Check if local is unchanged from base
-		if string(localContent) == string(base) {
-			// Local unchanged - just take remote
-			if err := os.WriteFile(localPath, remoteContent, 0644); err != nil {
-				logger.Error("Failed to write file %s: %v", relPath, err)
-			}
-			result.newHashes[relPath] = input.hasher.HashBytes(remoteContent)
-			continue
-		}
-
 		// Check if remote is unchanged from base
-		if string(remoteContent) == string(base) {
+		if bytes.Equal(remoteContent, base) {
 			// Remote unchanged - keep local
 			result.newHashes[relPath] = input.hasher.HashBytes(localContent)
 			continue
@@ -788,7 +781,7 @@ func (r *Repository) mergeDirectory(input processPathInput, baseContent map[stri
 
 		if mergeResult.HasConflict {
 			logger.Error("  - %s (merge conflict - both local and remote modified)", relPath)
-			merge.ShowDiffFromContent(localContent, remoteContent, relPath)
+			merge.ShowDiffFromContent(base, localContent, remoteContent, relPath)
 			conflicts = append(conflicts, hash.FileConflict{
 				Path: relPath,
 				Type: hash.ConflictTypeModified,
@@ -812,8 +805,8 @@ func (r *Repository) mergeDirectory(input processPathInput, baseContent map[stri
 	return result, conflicts
 }
 
-// mergeFile attempts to merge a single file
-func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]byte) (processPathResult, []hash.FileConflict) {
+// mergeFile attempts to merge a single file using git history
+func (r *Repository) mergeFile(input processPathInput) (processPathResult, []hash.FileConflict) {
 	result := processPathResult{newHashes: make(map[string]string)}
 	var conflicts []hash.FileConflict
 
@@ -830,37 +823,29 @@ func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]
 	localContent, err := os.ReadFile(input.localPath)
 	if err != nil {
 		// Local doesn't exist - just copy
-		if err := copyPath(input.sourcePath, input.localPath, nil); err != nil {
-			logger.Error("Failed to copy file: %v", err)
+		if !logger.IsDryRun() {
+			if err := copyPath(input.sourcePath, input.localPath, nil); err != nil {
+				logger.Error("Failed to copy file: %v", err)
+			}
 		}
 		result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
 		result.updated = true
 		return result, conflicts
 	}
 
-	// Get base content
-	base, hasBase := baseContent[fileName]
-	if !hasBase {
-		// Check if files are identical
-		if string(localContent) == string(remoteContent) {
-			result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
-			result.updated = true
-			return result, conflicts
-		}
-		// Conflict - no base for merge
-		logger.Error("  - %s (no base content for merge)", fileName)
-		merge.ShowDiffFromContent(localContent, remoteContent, fileName)
-		conflicts = append(conflicts, hash.FileConflict{
-			Path: fileName,
-			Type: hash.ConflictTypeModified,
-		})
-		return result, conflicts
+	// Get base content from git history
+	base, err := getBaseContentFromGitHistory(input.workDir, input.localPath)
+	if err != nil {
+		logger.Debug("Failed to get base from git history: %v", err)
+		base = []byte{} // Use empty base
 	}
 
 	// Check if local unchanged
-	if string(localContent) == string(base) {
-		if err := os.WriteFile(input.localPath, remoteContent, 0644); err != nil {
-			logger.Error("Failed to write file: %v", err)
+	if bytes.Equal(localContent, base) {
+		if !logger.IsDryRun() {
+			if err := os.WriteFile(input.localPath, remoteContent, 0644); err != nil {
+				logger.Error("Failed to write file: %v", err)
+			}
 		}
 		result.newHashes[fileName] = input.hasher.HashBytes(remoteContent)
 		result.updated = true
@@ -868,7 +853,7 @@ func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]
 	}
 
 	// Check if remote unchanged
-	if string(remoteContent) == string(base) {
+	if bytes.Equal(remoteContent, base) {
 		result.newHashes[fileName] = input.hasher.HashBytes(localContent)
 		result.updated = true
 		return result, conflicts
@@ -887,7 +872,7 @@ func (r *Repository) mergeFile(input processPathInput, baseContent map[string][]
 
 	if mergeResult.HasConflict {
 		logger.Error("  - %s (merge conflict - both local and remote modified)", fileName)
-		merge.ShowDiffFromContent(localContent, remoteContent, fileName)
+		merge.ShowDiffFromContent(base, localContent, remoteContent, fileName)
 		conflicts = append(conflicts, hash.FileConflict{
 			Path: fileName,
 			Type: hash.ConflictTypeModified,
@@ -931,6 +916,66 @@ func (r *Repository) calculateHashes(sourcePath string, isDir bool, hasher *hash
 		return nil
 	}
 	return newHashes
+}
+
+// writeConflictMarkers writes files with conflict markers for manual resolution
+func (r *Repository) writeConflictMarkers(input processPathInput, conflicts []hash.FileConflict) error {
+	if input.srcInfo.IsDir() {
+		// Process directory conflicts
+		for _, conflict := range conflicts {
+			sourcePath := filepath.Join(input.sourcePath, conflict.Path)
+			localPath := filepath.Join(input.localPath, conflict.Path)
+			
+			if err := r.writeFileWithConflictMarkers(input.workDir, sourcePath, localPath, conflict.Path); err != nil {
+				return fmt.Errorf("failed to write conflict markers for %s: %w", conflict.Path, err)
+			}
+		}
+	} else {
+		// Single file
+		fileName := filepath.Base(input.sourcePath)
+		if err := r.writeFileWithConflictMarkers(input.workDir, input.sourcePath, input.localPath, fileName); err != nil {
+			return fmt.Errorf("failed to write conflict markers: %w", err)
+		}
+	}
+	return nil
+}
+
+// writeFileWithConflictMarkers writes a single file with git conflict markers
+func (r *Repository) writeFileWithConflictMarkers(workDir, sourcePath, localPath, fileName string) error {
+	// Read remote content
+	remoteContent, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to read remote file: %w", err)
+	}
+
+	// Read local content
+	localContent, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to read local file: %w", err)
+	}
+
+	// Get base content from git history
+	base, err := getBaseContentFromGitHistory(workDir, localPath)
+	if err != nil {
+		logger.Debug("Failed to get base from git history: %v", err)
+		base = []byte{} // Use empty base
+	}
+
+	// Perform merge to get content with conflict markers
+	mergeResult, err := merge.ThreeWayMerge(base, localContent, remoteContent)
+	if err != nil {
+		return fmt.Errorf("failed to perform merge: %w", err)
+	}
+
+	// Write the merged content (which includes conflict markers if conflicts exist)
+	if !logger.IsDryRun() {
+		if err := os.WriteFile(localPath, mergeResult.Content, 0644); err != nil {
+			return fmt.Errorf("failed to write file with conflict markers: %w", err)
+		}
+	}
+
+	logger.Debug("Wrote conflict markers to %s", fileName)
+	return nil
 }
 
 // readRemoteFiles reads all files from the remote path into a map
@@ -1170,4 +1215,96 @@ func CreateCommit(workDir string, message string, updatedPaths []string) error {
 
 	logger.Info("Created commit: %s", commit.String())
 	return nil
+}
+
+// FindFirstCommitForFile finds the first commit that introduced a file in the repository
+// Returns the commit or nil if file has no history
+func FindFirstCommitForFile(repo *git.Repository, filePath string) (*object.Commit, error) {
+	head, err := repo.Head()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get commit iterator
+	commitIter, err := repo.Log(&git.LogOptions{
+		From:  head.Hash(),
+		Order: git.LogOrderCommitterTime,
+		PathFilter: func(path string) bool {
+			return strings.HasSuffix(path, filePath) || path == filePath
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer commitIter.Close()
+
+	// Iterate through commits to find the first (oldest) one
+	var firstCommit *object.Commit
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		firstCommit = c // Keep updating until we reach the oldest
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return firstCommit, nil
+}
+
+// GetFileContentFromCommit extracts file content from a specific commit
+func GetFileContentFromCommit(commit *object.Commit, filePath string) ([]byte, error) {
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := tree.File(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	content, err := file.Contents()
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(content), nil
+}
+
+// getBaseContentFromGitHistory gets the base content for a file from git history
+// Returns the content from the first commit, or empty byte slice if no history exists
+func getBaseContentFromGitHistory(workDir string, localPath string) ([]byte, error) {
+	// Open local repository
+	localRepo, err := git.PlainOpen(workDir)
+	if err != nil {
+		// Not a git repository or error opening - return empty base
+		logger.Debug("Could not open git repository at %s: %v", workDir, err)
+		return []byte{}, nil
+	}
+
+	// Get relative path from workDir
+	relPath, err := filepath.Rel(workDir, localPath)
+	if err != nil {
+		relPath = localPath
+	}
+
+	// Find first commit for this file
+	firstCommit, err := FindFirstCommitForFile(localRepo, relPath)
+	if err != nil || firstCommit == nil {
+		// File has no history - return empty base (will treat as new file)
+		logger.Debug("No git history found for %s, using empty base", relPath)
+		return []byte{}, nil
+	}
+
+	// Get content from first commit
+	baseContent, err := GetFileContentFromCommit(firstCommit, relPath)
+	if err != nil {
+		// Could not get content - return empty base
+		logger.Debug("Could not get content from first commit for %s: %v", relPath, err)
+		return []byte{}, nil
+	}
+
+	logger.Debug("Using base from first commit %s for %s", firstCommit.Hash.String()[:7], relPath)
+	return baseContent, nil
 }
