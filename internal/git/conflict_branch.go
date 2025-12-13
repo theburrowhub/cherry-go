@@ -115,46 +115,28 @@ func GetMergeInstructions(result *ConflictBranchResult) string {
 	var sb strings.Builder
 
 	sb.WriteString("\n")
-	sb.WriteString("╔═══════════════════════════════════════════════════════════════════════════╗\n")
-	sb.WriteString("║                    Merge Conflicts Detected                               ║\n")
-	sb.WriteString("╠═══════════════════════════════════════════════════════════════════════════╣\n")
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString(fmt.Sprintf("║  Remote changes have been saved to branch:                                ║\n"))
-	sb.WriteString(fmt.Sprintf("║    %s\n", padRight(result.BranchName, 69)))
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString("║  Files with conflicts:                                                    ║\n")
-
-	for _, file := range result.FilesCommitted {
-		sb.WriteString(fmt.Sprintf("║    - %s\n", padRight(file, 67)))
+	sb.WriteString("⚠️  Merge Conflicts - Remote changes saved to branch\n\n")
+	sb.WriteString(fmt.Sprintf("Branch: %s\n", result.BranchName))
+	
+	if len(result.FilesCommitted) > 0 {
+		sb.WriteString("\nFiles with conflicts:\n")
+		for _, file := range result.FilesCommitted {
+			sb.WriteString(fmt.Sprintf("  • %s\n", file))
+		}
 	}
-
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString("╠═══════════════════════════════════════════════════════════════════════════╣\n")
-	sb.WriteString("║  To resolve conflicts manually:                                           ║\n")
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString(fmt.Sprintf("║  1. git merge %s\n", padRight(result.BranchName, 53)))
-	sb.WriteString("║  2. Resolve conflicts in marked files                                     ║\n")
-	sb.WriteString("║  3. git add <resolved-files>                                              ║\n")
-	sb.WriteString("║  4. git commit                                                            ║\n")
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString("║  Or to discard local changes and use remote version:                      ║\n")
-	sb.WriteString(fmt.Sprintf("║  git checkout %s -- <files>\n", padRight(result.BranchName, 46)))
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString("║  After resolving, you can delete the conflict branch:                     ║\n")
-	sb.WriteString(fmt.Sprintf("║  git branch -d %s\n", padRight(result.BranchName, 52)))
-	sb.WriteString("║                                                                           ║\n")
-	sb.WriteString("╚═══════════════════════════════════════════════════════════════════════════╝\n")
+	
+	sb.WriteString("\nNext steps:\n")
+	sb.WriteString("Review the changes in the branch and merge when ready.\n")
+	sb.WriteString("The branch contains the remote version - adjust as needed before merging.\n\n")
+	sb.WriteString(fmt.Sprintf("  git diff %s              # Review changes\n", result.BranchName))
+	sb.WriteString(fmt.Sprintf("  git merge %s             # Merge when ready\n", result.BranchName))
+	sb.WriteString(fmt.Sprintf("  git branch -d %s   # Delete branch after merge\n", result.BranchName))
+	sb.WriteString("\n")
 
 	return sb.String()
 }
 
-// padRight pads a string to the right with spaces
-func padRight(s string, length int) string {
-	if len(s) >= length {
-		return s
-	}
-	return s + strings.Repeat(" ", length-len(s)) + "║"
-}
+
 
 // DeleteConflictBranch deletes a conflict branch after successful resolution
 func DeleteConflictBranch(workDir string, branchName string) error {

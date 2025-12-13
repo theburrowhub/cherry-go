@@ -37,25 +37,6 @@ func TestGetMergeInstructions(t *testing.T) {
 	}
 }
 
-func TestPadRight(t *testing.T) {
-	tests := []struct {
-		input    string
-		length   int
-		expected string
-	}{
-		{"short", 10, "short     ║"},
-		{"exactly10!", 10, "exactly10!"},
-		{"longer than expected", 5, "longer than expected"},
-	}
-
-	for _, tc := range tests {
-		result := padRight(tc.input, tc.length)
-		if result != tc.expected {
-			t.Errorf("padRight(%q, %d) = %q, want %q", tc.input, tc.length, result, tc.expected)
-		}
-	}
-}
-
 // Integration test - requires git to be installed
 func TestCreateConflictBranch_Integration(t *testing.T) {
 	// Skip if git is not available
