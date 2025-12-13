@@ -51,6 +51,9 @@ cherry-go sync --all --force
 
 # Merge with branch creation on conflict
 cherry-go sync --all --merge --branch-on-conflict
+
+# Merge with conflict markers for manual resolution
+cherry-go sync --all --merge --mark-conflicts
 ```
 
 ### Sync Modes
@@ -63,6 +66,7 @@ Cherry-go supports four synchronization modes:
 | **Merge** | `--merge` | Attempts automatic merge. Preserves local additions |
 | **Force** | `--force` | Overwrites all local changes |
 | **Branch** | `--merge --branch-on-conflict` | Creates a git branch with remote changes if merge conflicts |
+| **Mark Conflicts** | `--merge --mark-conflicts` | Writes conflict markers to files for manual resolution (no commit) |
 
 #### Default Detect Mode
 
@@ -97,6 +101,31 @@ cherry-go sync mylib --merge
 #   ✓ Merged utils/helper.go (local changes preserved)
 #   ⚠️ Merge conflicts in config/settings.go - cannot auto-merge
 #   💡 Use --branch-on-conflict to create a branch for manual resolution
+```
+
+#### Mark Conflicts Mode
+
+When `--merge --mark-conflicts` is used, cherry-go writes conflict markers to files for manual resolution:
+
+1. Attempts automatic merge first
+2. If conflicts occur, writes standard git conflict markers to files
+3. Does NOT commit - leaves files staged for manual editing
+4. User resolves conflicts and commits manually
+
+```bash
+cherry-go sync mylib --merge --mark-conflicts
+# Output:
+#   ✓ Merged utils/helper.go (local changes preserved)
+#   ⚠️ Conflict markers written to config/settings.go - resolve manually and commit
+#
+# File contains:
+#   <<<<<<< LOCAL
+#   local content
+#   ||||||| BASE
+#   original content
+#   =======
+#   remote content
+#   >>>>>>> REMOTE
 ```
 
 If merge conflicts occur, cherry-go suggests using `--branch-on-conflict` for manual resolution.
