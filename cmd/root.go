@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	configFile string
-	dryRun     bool
-	verbose    bool
-	cfg        *config.Config
+	configFile     string
+	dryRun         bool
+	verboseCount   int
+	cfg            *config.Config
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -33,11 +33,15 @@ Features:
 - Configurable via YAML file`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Configure logger based on flags
-		logger.SetVerbose(verbose)
+		logger.SetVerbosityLevel(verboseCount)
 		logger.SetDryRun(dryRun)
 		
-		if verbose {
-			logger.Debug("Verbose mode enabled")
+		if verboseCount > 0 {
+			if verboseCount == 1 {
+				logger.Debug("Verbose mode enabled")
+			} else {
+				logger.Debug("Verbose mode enabled (level %d - showing detailed diffs)", verboseCount)
+			}
 		}
 
 		if dryRun {
@@ -66,7 +70,7 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is .cherry-go.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "simulate actions without making changes")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().CountVarP(&verboseCount, "verbose", "v", "verbose output (use -v, -vv for detailed diffs)")
 }
 
 // initConfig reads in config file and ENV variables if set.
