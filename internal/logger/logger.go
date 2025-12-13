@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	logger  *slog.Logger
-	dryRun  bool
-	verbose bool
+	logger         *slog.Logger
+	dryRun         bool
+	verbose        bool
+	verbosityLevel int // 0 = normal, 1 = verbose, 2+ = very verbose (shows diffs)
 )
 
 // CustomHandler implements a custom slog.Handler with TIMESTAMP [SEVERITY] MSG format
@@ -42,10 +43,10 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 	// Format: TIMESTAMP [SEVERITY] MSG
 	timestamp := r.Time.Format("2006/01/02 15:04:05")
 	severity := levelString(r.Level)
-	
+
 	// Build the message
 	msg := fmt.Sprintf("%s [%s] %s", timestamp, severity, r.Message)
-	
+
 	// Add source info in verbose mode
 	if verbose && r.PC != 0 {
 		// Get source file info from PC
@@ -58,9 +59,9 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 			msg += fmt.Sprintf(" (%s:%d)", filename, frame.Line)
 		}
 	}
-	
+
 	msg += "\n"
-	
+
 	_, err := h.writer.Write([]byte(msg))
 	return err
 }
@@ -70,7 +71,7 @@ func (h *CustomHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	newAttrs := make([]slog.Attr, len(h.attrs)+len(attrs))
 	copy(newAttrs, h.attrs)
 	copy(newAttrs[len(h.attrs):], attrs)
-	
+
 	return &CustomHandler{
 		writer: h.writer,
 		level:  h.level,
@@ -105,27 +106,41 @@ func Init() {
 	// Create custom handler with TIMESTAMP [SEVERITY] MSG format
 	handler := NewCustomHandler(os.Stdout, slog.LevelInfo)
 	logger = slog.New(handler)
-	
+
 	// Set as default logger
 	slog.SetDefault(logger)
 }
 
-// SetVerbose enables or disables verbose mode
-func SetVerbose(enabled bool) {
-	verbose = enabled
-	
-	// Update logger level based on verbose mode
-	var level slog.Level
-	if verbose {
-		level = slog.LevelDebug
+// SetVerbosityLevel sets the verbosity level (0=normal, 1=verbose, 2+=very verbose with diffs)
+func SetVerbosityLevel(level int) {
+	verbosityLevel = level
+	if level > 0 {
+		verbose = true
+		var slogLevel slog.Level
+		if level >= 2 {
+			slogLevel = slog.LevelDebug
+		} else {
+			slogLevel = slog.LevelDebug
+		}
+		handler := NewCustomHandler(os.Stdout, slogLevel)
+		logger = slog.New(handler)
+		slog.SetDefault(logger)
 	} else {
-		level = slog.LevelInfo
+		verbose = false
+		handler := NewCustomHandler(os.Stdout, slog.LevelInfo)
+		logger = slog.New(handler)
+		slog.SetDefault(logger)
 	}
-	
-	// Create new custom handler with updated level
-	handler := NewCustomHandler(os.Stdout, level)
-	logger = slog.New(handler)
-	slog.SetDefault(logger)
+}
+
+// GetVerbosityLevel returns the current verbosity level
+func GetVerbosityLevel() int {
+	return verbosityLevel
+}
+
+// ShouldShowDiffs returns true if diffs should be shown (verbosity >= 2)
+func ShouldShowDiffs() bool {
+	return verbosityLevel >= 2
 }
 
 // SetDryRun enables or disables dry run mode
@@ -167,17 +182,17 @@ func Error(format string, v ...interface{}) {
 	} else {
 		level = slog.LevelError
 	}
-	
+
 	errorHandler := NewCustomHandler(os.Stderr, level)
 	errorLogger := slog.New(errorHandler)
-	
+
 	var message string
 	if len(v) == 0 {
 		message = format
 	} else {
 		message = fmt.Sprintf(format, v...)
 	}
-	
+
 	errorLogger.Error(message)
 }
 
@@ -190,7 +205,7 @@ func ErrorContext(msg string, args ...any) {
 	} else {
 		level = slog.LevelError
 	}
-	
+
 	errorHandler := NewCustomHandler(os.Stderr, level)
 	errorLogger := slog.New(errorHandler)
 	errorLogger.Error(msg, args...)
@@ -204,7 +219,7 @@ func Warning(format string, v ...interface{}) {
 	} else {
 		message = fmt.Sprintf(format, v...)
 	}
-	
+
 	logger.Warn(message)
 }
 

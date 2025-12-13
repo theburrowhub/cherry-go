@@ -62,8 +62,8 @@ func TestHashDirectory(t *testing.T) {
 
 	for filePath, content := range files {
 		fullPath := filepath.Join(tmpDir, filePath)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-			t.Fatalf("Failed to create directory for %s: %v", filePath, err)
+		if mkdirErr := os.MkdirAll(filepath.Dir(fullPath), 0755); mkdirErr != nil {
+			t.Fatalf("Failed to create directory for %s: %v", filePath, mkdirErr)
 		}
 		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 			t.Fatalf("Failed to create file %s: %v", filePath, err)
@@ -185,8 +185,8 @@ func TestVerifyFileIntegrity(t *testing.T) {
 	}
 
 	// Test 3: File deleted
-	if err := os.Remove(testFile); err != nil {
-		t.Fatalf("Failed to remove test file: %v", err)
+	if removeErr := os.Remove(testFile); removeErr != nil {
+		t.Fatalf("Failed to remove test file: %v", removeErr)
 	}
 
 	conflicts, err = hasher.VerifyFileIntegrity(tmpDir, expectedHashes)

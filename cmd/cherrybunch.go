@@ -27,7 +27,7 @@ var cherryBunchCmd = &cobra.Command{
 Cherry bunches are YAML template files that describe sets of files and directories
 to synchronize from repositories. This command helps create and manage these templates.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 
@@ -83,7 +83,7 @@ func runCherryBunchCreate(cmd *cobra.Command, args []string) {
 
 	// Interactive setup
 	scanner := bufio.NewScanner(os.Stdin)
-	
+
 	// Get basic information
 	fmt.Print("Cherry bunch name: ")
 	scanner.Scan()
@@ -149,8 +149,8 @@ func runCherryBunchCreate(cmd *cobra.Command, args []string) {
 	fmt.Println("Ctrl+C to cancel")
 
 	selectedFiles, selectedDirs, err := selector.SelectMixed(
-		allFiles, 
-		allDirs, 
+		allFiles,
+		allDirs,
 		"Select files and directories for the cherry bunch",
 	)
 	if err != nil {
@@ -165,7 +165,7 @@ func runCherryBunchCreate(cmd *cobra.Command, args []string) {
 
 	// Ask if user wants to configure custom paths
 	configureCustomPaths := interactive.AskYesNo(
-		"Do you want to configure specific paths for the selected items?", 
+		"Do you want to configure specific paths for the selected items?",
 		false,
 	)
 

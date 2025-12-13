@@ -33,6 +33,13 @@ func (fh *FileHasher) HashFile(filePath string) (string, error) {
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
+// HashBytes calculates SHA256 hash of byte content
+func (fh *FileHasher) HashBytes(content []byte) string {
+	hasher := sha256.New()
+	hasher.Write(content)
+	return fmt.Sprintf("%x", hasher.Sum(nil))
+}
+
 // HashDirectory calculates hashes for all files in a directory
 func (fh *FileHasher) HashDirectory(dirPath string, excludes []string) (map[string]string, error) {
 	hashes := make(map[string]string)

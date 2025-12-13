@@ -61,12 +61,8 @@ func (m *Manager) hashRepositoryURL(repoURL string) string {
 func (m *Manager) extractRepositoryName(repoURL string) string {
 	// Remove protocol
 	name := repoURL
-	if strings.HasPrefix(name, "https://") {
-		name = strings.TrimPrefix(name, "https://")
-	}
-	if strings.HasPrefix(name, "http://") {
-		name = strings.TrimPrefix(name, "http://")
-	}
+	name = strings.TrimPrefix(name, "https://")
+	name = strings.TrimPrefix(name, "http://")
 	if strings.HasPrefix(name, "git@") {
 		name = strings.TrimPrefix(name, "git@")
 		name = strings.Replace(name, ":", "/", 1)

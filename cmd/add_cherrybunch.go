@@ -12,8 +12,6 @@ import (
 )
 
 var (
-	cherryBunchURL  string
-	cherryBunchFile string
 	cherryBunchName string
 )
 
@@ -49,7 +47,7 @@ The cherry bunch file should have a .cherrybunch extension and contain:
 
 func runAddCherryBunch(cmd *cobra.Command, args []string) {
 	source := args[0]
-	
+
 	logger.Info("Adding cherry bunch from: %s", source)
 
 	// Load the cherry bunch

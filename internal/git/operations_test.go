@@ -1,11 +1,12 @@
 package git
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
 )
 
 func TestShouldExclude(t *testing.T) {
@@ -77,8 +78,8 @@ func TestCopyFile(t *testing.T) {
 
 	// Copy file
 	dstPath := filepath.Join(tmpDir, "subdir", "dest.txt")
-	if err := copyFile(srcPath, dstPath); err != nil {
-		t.Fatalf("Failed to copy file: %v", err)
+	if copyErr := copyFile(srcPath, dstPath); copyErr != nil {
+		t.Fatalf("Failed to copy file: %v", copyErr)
 	}
 
 	// Verify destination file
