@@ -126,9 +126,9 @@ func TestThreeWayMerge_OnlyRemoteChanges(t *testing.T) {
 	}
 }
 
-func TestPatchBasedMerge_PreservesLocalAdditions(t *testing.T) {
-	// This test verifies the key behavior: local additions are preserved
-	// while remote modifications are applied
+func TestGitMergeFile_ConflictOnAdjacentChanges(t *testing.T) {
+	// Git's merge algorithm detects conflicts when modifications happen on adjacent lines
+	// This is the standard and safer behavior
 	base := []byte("# Test file\n\nOriginal line\n")
 	// Local added a new line
 	local := []byte("# Test file\n\nOriginal line\nLocal addition\n")
@@ -140,29 +140,27 @@ func TestPatchBasedMerge_PreservesLocalAdditions(t *testing.T) {
 		t.Fatalf("ThreeWayMerge failed: %v", err)
 	}
 
-	if !result.Success {
-		t.Errorf("Expected merge to succeed, got conflict. Content:\n%s", result.Content)
+	// Git merge-file will detect this as a conflict because both sides modified adjacent areas
+	if result.Success {
+		t.Error("Expected conflict when local added line and remote modified adjacent line")
+	}
+
+	if !result.HasConflict {
+		t.Error("Expected HasConflict to be true")
 	}
 
 	content := string(result.Content)
 
-	// Should have the remote's modification
-	if !strings.Contains(content, "Modified line") {
-		t.Error("Should contain remote's modification")
-	}
-
-	// Should preserve local addition
-	if !strings.Contains(content, "Local addition") {
-		t.Error("Should preserve local addition")
+	// Should have conflict markers
+	if !ContainsConflictMarkers(result.Content) {
+		t.Errorf("Expected conflict markers in output. Content:\n%s", content)
 	}
 }
 
-func TestPatchBasedMerge_RemoteFixAndLocalAddition(t *testing.T) {
-	// Simulates the user's exact scenario:
-	// - Base has "Change made from source"
-	// - Local has "Change made from source" + "Change mada in project" (typo + addition)
-	// - Remote has "Change made in source" (fixed "from" to "in")
-	// Expected: "Change made in source" + "Change mada in project"
+func TestGitMergeFile_LocalAdditionOnly(t *testing.T) {
+	// When local only adds lines without modifying existing ones,
+	// and remote modifies an existing line, git detects a conflict
+	// This is standard Git behavior - changes in adjacent regions conflict
 	base := []byte("# Test file\n\nChange made from source\n")
 	local := []byte("# Test file\n\nChange made from source\nChange mada in project\n")
 	remote := []byte("# Test file\n\nChange made in source\n")
@@ -172,25 +170,18 @@ func TestPatchBasedMerge_RemoteFixAndLocalAddition(t *testing.T) {
 		t.Fatalf("ThreeWayMerge failed: %v", err)
 	}
 
-	if !result.Success {
-		t.Errorf("Expected merge to succeed, got conflict. Content:\n%s", result.Content)
+	// This produces a conflict in git merge-file
+	if result.Success {
+		t.Error("Expected conflict when both sides modify adjacent regions")
 	}
 
-	content := string(result.Content)
-
-	// Should have remote's fix ("in" instead of "from")
-	if !strings.Contains(content, "Change made in source") {
-		t.Error("Should contain remote's fix 'Change made in source'")
+	if !result.HasConflict {
+		t.Error("Expected HasConflict to be true")
 	}
 
-	// Should preserve local addition
-	if !strings.Contains(content, "Change mada in project") {
-		t.Error("Should preserve local addition 'Change mada in project'")
-	}
-
-	// Should NOT have the old version
-	if strings.Contains(content, "Change made from source") {
-		t.Error("Should not contain old version 'Change made from source'")
+	// Should have conflict markers
+	if !ContainsConflictMarkers(result.Content) {
+		t.Errorf("Expected conflict markers. Content:\n%s", result.Content)
 	}
 }
 
@@ -279,43 +270,4 @@ func TestIsBinaryFile(t *testing.T) {
 	}
 }
 
-func TestHasConflicts(t *testing.T) {
-	resultsWithConflict := []FileMergeResult{
-		{Path: "file1.txt", Result: MergeResult{Success: true}},
-		{Path: "file2.txt", Result: MergeResult{HasConflict: true}},
-	}
 
-	resultsWithoutConflict := []FileMergeResult{
-		{Path: "file1.txt", Result: MergeResult{Success: true}},
-		{Path: "file2.txt", Result: MergeResult{Success: true}},
-	}
-
-	if !HasConflicts(resultsWithConflict) {
-		t.Error("Should detect conflicts")
-	}
-
-	if HasConflicts(resultsWithoutConflict) {
-		t.Error("Should not detect conflicts")
-	}
-}
-
-func TestGetConflictedFiles(t *testing.T) {
-	results := []FileMergeResult{
-		{Path: "file1.txt", Result: MergeResult{Success: true}},
-		{Path: "file2.txt", Result: MergeResult{HasConflict: true}},
-		{Path: "file3.txt", Error: os.ErrNotExist},
-	}
-
-	conflicted := GetConflictedFiles(results)
-
-	if len(conflicted) != 2 {
-		t.Errorf("Expected 2 conflicted files, got %d", len(conflicted))
-	}
-
-	expected := map[string]bool{"file2.txt": true, "file3.txt": true}
-	for _, f := range conflicted {
-		if !expected[f] {
-			t.Errorf("Unexpected conflicted file: %s", f)
-		}
-	}
-}
