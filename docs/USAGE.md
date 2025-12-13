@@ -12,6 +12,8 @@ This guide provides detailed examples and use cases for cherry-go.
 4. [Advanced Use Cases](#advanced-use-cases)
 5. [CI/CD Integration](#cicd-integration)
 6. [Troubleshooting](#troubleshooting)
+7. [Best Practices](#best-practices)
+8. [Examples Repository](#examples-repository)
 
 ## Basic Usage
 
@@ -147,6 +149,38 @@ cherry-go sync mylib --merge --branch-on-conflict
 #   3. git add <resolved-files>
 #   4. git commit
 ```
+
+### Cleaning Up Conflict Branches
+
+When using `--branch-on-conflict`, cherry-go creates branches with the prefix configured in your `.cherry-go.yaml` (default: `cherry-go/sync/`). After resolving conflicts, you can clean up these branches:
+
+```bash
+# List all conflict branches
+cherry-go cleanup
+# Output:
+#   Found 2 conflict branch(es):
+#     1. cherry-go/sync/mylib-20241212-120000
+#     2. cherry-go/sync/utils-20241213-143000
+#   
+#   To delete all conflict branches, run:
+#     cherry-go cleanup --all
+
+# Delete all conflict branches
+cherry-go cleanup --all
+# Output:
+#   ✅ Successfully deleted 2 conflict branch(es)
+#     ✓ cherry-go/sync/mylib-20241212-120000
+#     ✓ cherry-go/sync/utils-20241213-143000
+
+# Dry run to preview what would be deleted
+cherry-go cleanup --all --dry-run
+```
+
+**Best practice workflow:**
+1. Sync with `--merge --branch-on-conflict`
+2. Resolve conflicts by merging the created branch
+3. Test your changes
+4. Clean up conflict branches with `cherry-go cleanup --all`
 
 ## Authentication
 

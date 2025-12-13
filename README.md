@@ -274,6 +274,73 @@ cherry-go add directory src/
 - ✅ **Deleted files**: Removed from local copy
 - ✅ **Excluded patterns**: Ignored during sync
 
+#### `add cherrybunch` - Add from template
+
+Add files and directories using a Cherry Bunch template. Cherry Bunches are reusable `.cherrybunch` files that define sets of files and directories to sync from a repository.
+
+```bash
+cherry-go add cherrybunch [URL or file]
+# or
+cherry-go add cb [URL or file]
+```
+
+**Examples**:
+
+```bash
+# Add from local file
+cherry-go add cherrybunch ./templates/python.cherrybunch
+
+# Add from URL
+cherry-go add cherrybunch https://raw.githubusercontent.com/user/bunches/main/python.cherrybunch
+
+# Add with custom name (overrides name in file)
+cherry-go add cb --name my-setup ./template.cherrybunch
+```
+
+**Cherry Bunch file example** (`python.cherrybunch`):
+
+```yaml
+name: python-project
+description: Python project utilities
+version: "1.0"
+repository: https://github.com/user/python-utils.git
+files:
+  - path: src/logger.py
+    local_path: utils/logger.py
+    branch: main
+directories:
+  - path: src/helpers/
+    local_path: utils/helpers/
+    branch: main
+    exclude: ["*.test.py", "__pycache__"]
+```
+
+For detailed information about creating and using Cherry Bunches, see [examples/cherrybunch-usage.md](examples/cherrybunch-usage.md).
+
+### `cherrybunch` - Manage templates
+
+Create and manage Cherry Bunch templates:
+
+```bash
+# Create a template interactively from current git repository
+cherry-go cherrybunch create
+
+# Create with specific output file and branch
+cherry-go cherrybunch create --output my-template.cherrybunch --branch main
+```
+
+The `create` command guides you through:
+1. Detecting current git repository
+2. Selecting files and directories interactively
+3. Configuring paths and branches
+4. Generating the `.cherrybunch` file
+
+**Use cases:**
+- Share project setup templates with team
+- Create reusable component libraries
+- Standardize project structures
+- Quick-start new projects with dependencies
+
 ### `remove` - Remove a source repository
 
 Remove a source from tracking:
@@ -284,21 +351,55 @@ cherry-go remove SOURCE_NAME
 
 ### `sync` - Synchronize files
 
-Sync files from tracked repositories:
+Sync files from tracked repositories. Cherry-go supports multiple synchronization modes to handle conflicts:
+
+**Sync Modes:**
+
+| Mode | Flag | Behavior |
+|------|------|----------|
+| **Detect** (default) | none | Detects and reports conflicts WITHOUT making changes |
+| **Merge** | `--merge` | Attempts automatic merge, preserves local additions |
+| **Force** | `--force` | Overwrites all local changes with remote version |
+| **Branch** | `--merge --branch-on-conflict` | Creates a git branch with remote changes if conflicts |
+| **Mark** | `--merge --mark-conflicts` | Writes conflict markers to files for manual resolution |
+
+**Basic usage:**
 
 ```bash
-# Sync all sources
+# Check for updates (default - detects conflicts without making changes)
 cherry-go sync --all
 
 # Sync specific source
 cherry-go sync SOURCE_NAME
 
-# Dry run (no changes made)
+# Dry run (preview changes without making them)
 cherry-go sync --all --dry-run
-
-# Force sync (override local changes)
-cherry-go sync --all --force
 ```
+
+**Sync with conflict resolution:**
+
+```bash
+# Merge mode - attempts automatic merge preserving local changes
+cherry-go sync --all --merge
+
+# Force mode - override all local changes
+cherry-go sync --all --force
+
+# Branch on conflict - creates a git branch for manual resolution
+cherry-go sync --all --merge --branch-on-conflict
+
+# Mark conflicts - writes conflict markers (<<<<<<, ======, >>>>>>) to files
+cherry-go sync --all --merge --mark-conflicts
+```
+
+**When to use each mode:**
+- **Detect**: Safe default, shows what would change
+- **Merge**: When you have local changes you want to preserve
+- **Force**: When you want to discard all local changes
+- **Branch**: When you want to review conflicts in a separate branch
+- **Mark**: When you prefer resolving conflicts manually with markers
+
+For detailed information about conflict resolution strategies, see [USAGE.md](docs/USAGE.md#sync-modes).
 
 ### `cache` - Manage repository cache
 
@@ -368,6 +469,46 @@ Display current configuration and tracking status:
 ```bash
 cherry-go status
 ```
+
+### `version` - Show version information
+
+Display version, commit hash, and build time:
+
+```bash
+cherry-go version
+```
+
+**Example output:**
+```
+Cherry-go version: 0.1.0
+Commit hash: a1b2c3d4
+Build time: 2025-12-13T15:30:00Z
+```
+
+### `completion` - Shell autocompletion
+
+Generate autocompletion scripts for your shell:
+
+```bash
+# Bash
+cherry-go completion bash > /etc/bash_completion.d/cherry-go
+source /etc/bash_completion.d/cherry-go
+
+# Zsh
+cherry-go completion zsh > "${fpath[1]}/_cherry-go"
+
+# Fish
+cherry-go completion fish > ~/.config/fish/completions/cherry-go.fish
+
+# PowerShell
+cherry-go completion powershell > cherry-go.ps1
+. ./cherry-go.ps1
+```
+
+**Installation tips:**
+- Add to your shell's rc file for persistence
+- May require restarting your shell or sourcing the file
+- Provides tab completion for commands, flags, and arguments
 
 ## Configuration
 
