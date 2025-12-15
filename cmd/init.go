@@ -1,11 +1,12 @@
 package cmd
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
 )
 
 // initCmd represents the init command

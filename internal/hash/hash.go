@@ -23,7 +23,7 @@ func (fh *FileHasher) HashFile(filePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open file %s: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {

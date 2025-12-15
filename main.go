@@ -1,9 +1,10 @@
 package main
 
 import (
+	"os"
+
 	"cherry-go/cmd"
 	"cherry-go/internal/logger"
-	"os"
 )
 
 func main() {

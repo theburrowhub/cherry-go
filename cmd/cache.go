@@ -1,11 +1,12 @@
 package cmd
 
 import (
-	"cherry-go/internal/cache"
-	"cherry-go/internal/logger"
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/cache"
+	"cherry-go/internal/logger"
 )
 
 // cacheCmd represents the cache command

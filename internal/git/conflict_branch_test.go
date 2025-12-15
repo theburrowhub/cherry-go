@@ -54,7 +54,7 @@ func TestCreateConflictBranch_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Initialize git repo
 	cmd := exec.Command("git", "init")
@@ -77,7 +77,7 @@ func TestCreateConflictBranch_Integration(t *testing.T) {
 
 	// Create initial file and commit
 	initialFile := filepath.Join(tempDir, "file.txt")
-	os.WriteFile(initialFile, []byte("initial content\n"), 0644)
+	_ = os.WriteFile(initialFile, []byte("initial content\n"), 0644)
 
 	cmd = exec.Command("git", "add", ".")
 	cmd.Dir = tempDir
@@ -153,7 +153,7 @@ func TestCreateConflictBranch_NotGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	files := map[string][]byte{
 		"file.txt": []byte("content"),
@@ -171,7 +171,7 @@ func TestListConflictBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Initialize git repo
 	repo, err := git.PlainInit(tempDir, false)
@@ -182,9 +182,9 @@ func TestListConflictBranches(t *testing.T) {
 	// Create initial commit
 	worktree, _ := repo.Worktree()
 	testFile := filepath.Join(tempDir, "test.txt")
-	os.WriteFile(testFile, []byte("test"), 0644)
-	worktree.Add("test.txt")
-	worktree.Commit("initial", &git.CommitOptions{
+	_ = os.WriteFile(testFile, []byte("test"), 0644)
+	_, _ = worktree.Add("test.txt")
+	_, _ = worktree.Commit("initial", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "Test",
 			Email: "test@test.com",
@@ -251,7 +251,7 @@ func TestDeleteAllConflictBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Initialize git repo
 	repo, err := git.PlainInit(tempDir, false)
@@ -262,9 +262,9 @@ func TestDeleteAllConflictBranches(t *testing.T) {
 	// Create initial commit
 	worktree, _ := repo.Worktree()
 	testFile := filepath.Join(tempDir, "test.txt")
-	os.WriteFile(testFile, []byte("test"), 0644)
-	worktree.Add("test.txt")
-	worktree.Commit("initial", &git.CommitOptions{
+	_ = os.WriteFile(testFile, []byte("test"), 0644)
+	_, _ = worktree.Add("test.txt")
+	_, _ = worktree.Commit("initial", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "Test",
 			Email: "test@test.com",

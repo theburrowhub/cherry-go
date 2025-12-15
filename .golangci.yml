@@ -1,43 +1,41 @@
+version: "2"
+
 run:
   timeout: 5m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - vendor
 
 output:
-  format: colored-line-number
+  formats:
+    text:
+      path: stdout
+      format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: cherry-go
-  golint:
-    min-confidence: 0.8
-  govet:
-    check-shadowing: true
-  misspell:
-    locale: US
-  unused:
-    check-exported: false
 
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
+    - misspell
+
+formatters:
+  enable:
     - gofmt
     - goimports
-  disable:
-    - typecheck
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - cherry-go
 
 issues:
+  exclude-dirs:
+    - vendor
   exclude-rules:
     - path: _test\.go
       linters:
@@ -47,26 +45,26 @@ issues:
         - gocyclo
     - path: cmd/
       linters:
-        - gochecknoinits  # Cobra commands use init() by design
-        - depguard  # Allow all imports in cmd package
+        - gochecknoinits
+        - depguard
     - path: internal/
       linters:
-        - depguard  # Allow all imports in internal packages
+        - depguard
     - linters:
         - lll
-      source: "^//"  # Exclude long comment lines
+      source: "^//"
     - linters:
         - goprintffuncname
-      text: "should be named"  # Our logger functions are intentionally named this way
+      text: "should be named"
     - linters:
         - goconst
-      text: "(ssh|auto|1\\.0)"  # Small strings that don't need constants
+      text: "(ssh|auto|1\\.0)"
     - linters:
         - gomnd
-      text: "(0755|0644|0600)"  # File permissions are clear as numbers
+      text: "(0755|0644|0600)"
     - linters:
         - unparam
-      text: "always nil"  # Some functions return error for consistency
+      text: "always nil"
     - linters:
         - dupl
-      text: "duplicate of"  # Some duplication is acceptable for clarity
+      text: "duplicate of"

@@ -656,8 +656,10 @@ func (r *Repository) getFileConflicts(input processPathInput) []hash.FileConflic
 }
 
 // hasLocalChanges checks if there are local changes in the given path
+//
+//nolint:unused // Reserved for future conflict detection improvements
 func (r *Repository) hasLocalChanges(pathSpec config.PathSpec, localPath string, hasher *hash.FileHasher, isDir bool) bool {
-	if pathSpec.Files == nil || len(pathSpec.Files) == 0 {
+	if len(pathSpec.Files) == 0 {
 		// No previous hashes - first sync
 		return false
 	}
@@ -992,7 +994,7 @@ func (r *Repository) readRemoteFiles(sourcePath, localPath string, isDir bool, e
 		return files
 	}
 
-	filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return err
 		}

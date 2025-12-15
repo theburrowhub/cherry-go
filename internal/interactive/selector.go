@@ -122,7 +122,7 @@ func ConfigurePaths(items []string, itemType string, defaultBranch string) ([]Pa
 		// Local path configuration
 		fmt.Printf("Local path [%s]: ", item)
 		var localPath string
-		fmt.Scanln(&localPath)
+		_, _ = fmt.Scanln(&localPath)
 		if strings.TrimSpace(localPath) == "" {
 			localPath = item
 		}
@@ -130,7 +130,7 @@ func ConfigurePaths(items []string, itemType string, defaultBranch string) ([]Pa
 		// Branch configuration
 		fmt.Printf("Branch [%s]: ", defaultBranch)
 		var branch string
-		fmt.Scanln(&branch)
+		_, _ = fmt.Scanln(&branch)
 		if strings.TrimSpace(branch) == "" {
 			branch = defaultBranch
 		}
@@ -158,7 +158,7 @@ func AskYesNo(question string, defaultYes bool) bool {
 
 	fmt.Printf("%s [%s]: ", question, defaultStr)
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 
 	response = strings.TrimSpace(strings.ToLower(response))
 

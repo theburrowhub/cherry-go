@@ -13,7 +13,7 @@ func TestBaseContentManager_SaveAndGetSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create manager with custom base dir
 	manager := &BaseContentManager{baseDir: tempDir}
@@ -61,7 +61,7 @@ func TestBaseContentManager_GetFileContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 
@@ -101,7 +101,7 @@ func TestBaseContentManager_DeleteSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 
@@ -136,7 +136,7 @@ func TestBaseContentManager_DeleteSourceSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 
@@ -179,16 +179,16 @@ func TestBaseContentManager_CleanOrphanedSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 
 	files := map[string][]byte{"file.go": []byte("content")}
 
 	// Save snapshots for multiple sources
-	manager.SaveSnapshot("source1", "path", files)
-	manager.SaveSnapshot("source2", "path", files)
-	manager.SaveSnapshot("source3", "path", files)
+	_ = manager.SaveSnapshot("source1", "path", files)
+	_ = manager.SaveSnapshot("source2", "path", files)
+	_ = manager.SaveSnapshot("source3", "path", files)
 
 	// Clean orphaned (only source1 and source3 are valid)
 	validSources := []string{"source1", "source3"}
@@ -214,7 +214,7 @@ func TestBaseContentManager_GetSnapshot_NonExistent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 
@@ -233,7 +233,7 @@ func TestBaseContentManager_OverwriteSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 
@@ -245,14 +245,14 @@ func TestBaseContentManager_OverwriteSnapshot(t *testing.T) {
 		"file1.go": []byte("original"),
 		"file2.go": []byte("original2"),
 	}
-	manager.SaveSnapshot(sourceName, pathSpec, files1)
+	_ = manager.SaveSnapshot(sourceName, pathSpec, files1)
 
 	// Save new version (different files)
 	files2 := map[string][]byte{
 		"file1.go": []byte("updated"),
 		"file3.go": []byte("new file"),
 	}
-	manager.SaveSnapshot(sourceName, pathSpec, files2)
+	_ = manager.SaveSnapshot(sourceName, pathSpec, files2)
 
 	// Get and verify
 	retrieved, err := manager.GetSnapshot(sourceName, pathSpec)
@@ -278,7 +278,7 @@ func TestBaseContentManager_PathHashing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	manager := &BaseContentManager{baseDir: tempDir}
 

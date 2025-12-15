@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
 )
 
 var (

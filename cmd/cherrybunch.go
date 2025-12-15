@@ -2,15 +2,16 @@ package cmd
 
 import (
 	"bufio"
-	"cherry-go/internal/config"
-	"cherry-go/internal/git"
-	"cherry-go/internal/interactive"
-	"cherry-go/internal/logger"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/git"
+	"cherry-go/internal/interactive"
+	"cherry-go/internal/logger"
 )
 
 var (

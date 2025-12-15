@@ -223,15 +223,15 @@ func TestIsBinaryFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create text file
 	textPath := filepath.Join(tempDir, "text.txt")
-	os.WriteFile(textPath, []byte("hello world\n"), 0644)
+	_ = os.WriteFile(textPath, []byte("hello world\n"), 0644)
 
 	// Create binary file (with null bytes)
 	binaryPath := filepath.Join(tempDir, "binary.bin")
-	os.WriteFile(binaryPath, []byte("hello\x00world\n"), 0644)
+	_ = os.WriteFile(binaryPath, []byte("hello\x00world\n"), 0644)
 
 	if isBinaryFile(textPath) {
 		t.Error("Text file should not be detected as binary")

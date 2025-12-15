@@ -60,7 +60,7 @@ func gitMergeFileDiff3(base, local, remote []byte) (MergeResult, error) {
 	if err != nil {
 		return MergeResult{}, fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	baseFile := filepath.Join(tempDir, "base")
 	localFile := filepath.Join(tempDir, "local")
@@ -108,7 +108,7 @@ func isBinaryFile(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Read first 8000 bytes (same as git)
 	buf := make([]byte, 8000)

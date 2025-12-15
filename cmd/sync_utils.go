@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"cherry-go/internal/git"
-	"cherry-go/internal/logger"
 	"fmt"
 	"os"
+
+	"cherry-go/internal/git"
+	"cherry-go/internal/logger"
 )
 
 // performInitialSync performs the initial sync for a newly added file/directory
