@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
-	"cherry-go/internal/utils"
 	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
+	"cherry-go/internal/utils"
 )
 
 var (
@@ -113,10 +114,10 @@ func detectAuthType(repoURL string) string {
 		return "auto"
 	}
 
-	switch {
-	case parsedURL.Scheme == "ssh":
+	switch parsedURL.Scheme {
+	case "ssh":
 		return "ssh"
-	case parsedURL.Scheme == "https":
+	case "https":
 		// Check for common Git hosting services
 		switch parsedURL.Host {
 		case "github.com", "gitlab.com":

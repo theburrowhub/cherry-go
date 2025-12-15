@@ -1,19 +1,18 @@
 package cmd
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
 )
 
 var (
-	cherryBunchURL  string
-	cherryBunchFile string
 	cherryBunchName string
 )
 
@@ -49,7 +48,7 @@ The cherry bunch file should have a .cherrybunch extension and contain:
 
 func runAddCherryBunch(cmd *cobra.Command, args []string) {
 	source := args[0]
-	
+
 	logger.Info("Adding cherry bunch from: %s", source)
 
 	// Load the cherry bunch
@@ -103,7 +102,7 @@ func loadCherryBunchFromURL(url string) (*config.CherryBunch, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to download cherry bunch: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download cherry bunch: HTTP %d", resp.StatusCode)

@@ -51,13 +51,13 @@ type SyncOptions struct {
 
 // CherryBunch represents a cherry bunch template file
 type CherryBunch struct {
-	Name        string                    `yaml:"name"`
-	Description string                    `yaml:"description,omitempty"`
-	Version     string                    `yaml:"version"`
-	Repository  string                    `yaml:"repository"`
-	Auth        AuthConfig               `yaml:"auth,omitempty"`
-	Files       []CherryBunchFileSpec    `yaml:"files,omitempty"`
-	Directories []CherryBunchDirSpec     `yaml:"directories,omitempty"`
+	Name        string                `yaml:"name"`
+	Description string                `yaml:"description,omitempty"`
+	Version     string                `yaml:"version"`
+	Repository  string                `yaml:"repository"`
+	Auth        AuthConfig            `yaml:"auth,omitempty"`
+	Files       []CherryBunchFileSpec `yaml:"files,omitempty"`
+	Directories []CherryBunchDirSpec  `yaml:"directories,omitempty"`
 }
 
 // CherryBunchFileSpec represents a file specification in a cherry bunch
