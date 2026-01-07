@@ -11,9 +11,10 @@ This guide provides detailed examples and use cases for cherry-go.
 3. [Configuration File](#configuration-file)
 4. [Advanced Use Cases](#advanced-use-cases)
 5. [CI/CD Integration](#cicd-integration)
-6. [Troubleshooting](#troubleshooting)
-7. [Best Practices](#best-practices)
-8. [Examples Repository](#examples-repository)
+6. [Docker Usage](#docker-usage)
+7. [Troubleshooting](#troubleshooting)
+8. [Best Practices](#best-practices)
+9. [Examples Repository](#examples-repository)
 
 ## Basic Usage
 
@@ -425,6 +426,225 @@ pipeline {
     }
 }
 ```
+
+## Docker Usage
+
+Cherry-go is available as a Docker image, making it easy to use in CI/CD pipelines or as a containerized tool without installing dependencies.
+
+### Docker Image
+
+The official Docker image is available at:
+
+```
+ghcr.io/theburrowhub/cherry-go:latest
+```
+
+Available tags:
+- `latest` - Latest stable release
+- `x.y.z` - Specific version (e.g., `1.2.3`)
+- `x.y.z-amd64` - AMD64 architecture specific
+- `x.y.z-arm64` - ARM64 architecture specific
+
+### Basic Docker Usage
+
+```bash
+# Check version
+docker run --rm ghcr.io/theburrowhub/cherry-go:latest version
+
+# Run cherry-go in your project directory
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest status
+
+# Initialize a new project
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest init
+
+# Sync all sources
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync --all
+```
+
+### Setting Up Shell Aliases
+
+For daily use, setting up an alias makes Docker usage seamless. Add one of the following to your shell configuration file (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`).
+
+#### Bash / Zsh
+
+```bash
+# Basic alias (for public repositories)
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest'
+
+# With SSH key support (for private repositories via SSH)
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace -v "$HOME/.ssh":/root/.ssh:ro ghcr.io/theburrowhub/cherry-go:latest'
+
+# With GitHub token support (for private repositories via HTTPS)
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace -e GITHUB_TOKEN ghcr.io/theburrowhub/cherry-go:latest'
+
+# Full-featured alias (SSH + tokens + GitLab)
+alias cherry-go='docker run --rm -v "$(pwd)":/workspace -v "$HOME/.ssh":/root/.ssh:ro -e GITHUB_TOKEN -e GITLAB_TOKEN -e GIT_TOKEN ghcr.io/theburrowhub/cherry-go:latest'
+```
+
+After adding the alias, reload your shell:
+
+```bash
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+#### Fish Shell
+
+```fish
+# Basic alias
+alias cherry-go 'docker run --rm -v (pwd):/workspace ghcr.io/theburrowhub/cherry-go:latest'
+
+# With SSH key support
+alias cherry-go 'docker run --rm -v (pwd):/workspace -v $HOME/.ssh:/root/.ssh:ro ghcr.io/theburrowhub/cherry-go:latest'
+
+# Save the alias permanently
+funcsave cherry-go
+```
+
+#### PowerShell (Windows)
+
+```powershell
+# Add to your PowerShell profile ($PROFILE)
+function cherry-go {
+    docker run --rm -v "${PWD}:/workspace" ghcr.io/theburrowhub/cherry-go:latest $args
+}
+```
+
+### Authentication in Docker
+
+#### Using GitHub/GitLab Tokens
+
+Pass environment variables to the container:
+
+```bash
+# Single token
+docker run --rm \
+  -v "$(pwd)":/workspace \
+  -e GITHUB_TOKEN="ghp_xxxxxxxxxxxx" \
+  ghcr.io/theburrowhub/cherry-go:latest sync --all
+
+# Multiple tokens
+docker run --rm \
+  -v "$(pwd)":/workspace \
+  -e GITHUB_TOKEN \
+  -e GITLAB_TOKEN \
+  -e GIT_TOKEN \
+  ghcr.io/theburrowhub/cherry-go:latest sync --all
+```
+
+#### Using SSH Keys
+
+Mount your SSH directory as read-only:
+
+```bash
+docker run --rm \
+  -v "$(pwd)":/workspace \
+  -v "$HOME/.ssh":/root/.ssh:ro \
+  ghcr.io/theburrowhub/cherry-go:latest sync --all
+```
+
+**Important limitations with SSH in Docker:**
+
+1. **SSH Agent is not available**: The SSH agent running on your host is not accessible inside the Docker container. You must mount your SSH keys directly.
+
+2. **Key permissions**: SSH keys mounted in Docker may have permission issues. The `:ro` (read-only) flag helps, but some SSH configurations may still fail.
+
+3. **Recommended alternative**: Use token-based authentication (GITHUB_TOKEN, GITLAB_TOKEN) when running in Docker, as it's more reliable.
+
+### Docker in CI/CD
+
+#### GitHub Actions with Docker Image
+
+```yaml
+name: Sync Dependencies
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/theburrowhub/cherry-go:latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Sync dependencies
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: cherry-go sync --all
+      
+      - name: Check for changes
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+          else
+            echo "Changes detected"
+          fi
+```
+
+#### GitLab CI with Docker Image
+
+```yaml
+sync-dependencies:
+  stage: sync
+  image: ghcr.io/theburrowhub/cherry-go:latest
+  script:
+    - cherry-go sync --all
+    - |
+      if git diff --quiet; then
+        echo "No changes"
+      else
+        git config user.name "Cherry-go Bot"
+        git config user.email "cherry-go@company.com"
+        git add .
+        git commit -m "cherry-go: sync dependencies"
+        git push origin HEAD:cherry-go/sync
+      fi
+  only:
+    - schedules
+  variables:
+    GITLAB_TOKEN: $GITLAB_TOKEN
+```
+
+### Building Docker Image Locally
+
+If you want to build the Docker image locally for development:
+
+```bash
+# Clone the repository
+git clone https://github.com/theburrowhub/cherry-go.git
+cd cherry-go
+
+# Build and create Docker image
+make docker-build
+
+# Run your local image
+make docker-run ARGS="status"
+
+# Run with SSH keys
+make docker-run-ssh ARGS="sync myrepo"
+
+# Run with GitHub token
+GITHUB_TOKEN=xxx make docker-run-token ARGS="sync myrepo"
+```
+
+### Docker vs Native Installation
+
+| Feature | Native Binary | Docker |
+|---------|--------------|--------|
+| Installation | Download or build | Pull image |
+| SSH Agent | ✅ Full support | ❌ Not available |
+| SSH Keys | ✅ Full support | ⚠️ Mount required |
+| Tokens | ✅ Full support | ✅ Via -e flag |
+| Performance | ✅ Fastest | ⚠️ Container overhead |
+| Isolation | ❌ System-wide | ✅ Containerized |
+| CI/CD | ⚠️ Requires installation | ✅ Ready to use |
+| Updates | Manual | Pull new image |
+
+**Recommendation**: 
+- Use **native binary** for local development with private SSH repositories
+- Use **Docker** for CI/CD pipelines and when you prefer containerized tools
 
 ## Troubleshooting
 
