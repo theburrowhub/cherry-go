@@ -1,3 +1,7 @@
+## [0.3.0] - 2025-12-15
+
+- Feat/merge-sync (#6)
+
 ## [0.2.1] - 2025-11-10
 
 - fix(install.sh): install script crashing when backup existing fails

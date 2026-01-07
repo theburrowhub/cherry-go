@@ -6,7 +6,7 @@ cherry-go.exe
 *.so
 *.dylib
 
-# GoReleaser
+# Build output
 dist/
 
 # Test binary, built with `go test -c`

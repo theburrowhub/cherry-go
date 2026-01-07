@@ -13,6 +13,8 @@ This guide provides detailed examples and use cases for cherry-go.
 5. [CI/CD Integration](#cicd-integration)
 6. [Docker Usage](#docker-usage)
 7. [Troubleshooting](#troubleshooting)
+8. [Best Practices](#best-practices)
+9. [Examples Repository](#examples-repository)
 
 ## Basic Usage
 
@@ -35,15 +37,151 @@ cherry-go status
 ### Syncing Changes
 
 ```bash
-# Sync all sources
+# Check for updates (default - detects conflicts without making changes)
 cherry-go sync --all
 
+# Sync with automatic merge
+cherry-go sync --all --merge
+
 # Sync specific source
-cherry-go sync awesome-go-utils
+cherry-go sync awesome-go-utils --merge
 
 # Dry run to see what would happen
 cherry-go sync --all --dry-run
+
+# Force sync (overwrite local changes)
+cherry-go sync --all --force
+
+# Merge with branch creation on conflict
+cherry-go sync --all --merge --branch-on-conflict
+
+# Merge with conflict markers for manual resolution
+cherry-go sync --all --merge --mark-conflicts
 ```
+
+### Sync Modes
+
+Cherry-go supports four synchronization modes:
+
+| Mode | Flag | Behavior |
+|------|------|----------|
+| **Detect** (default) | none | Detects and reports conflicts WITHOUT making changes |
+| **Merge** | `--merge` | Attempts automatic merge. Preserves local additions |
+| **Force** | `--force` | Overwrites all local changes |
+| **Branch** | `--merge --branch-on-conflict` | Creates a git branch with remote changes if merge conflicts |
+| **Mark Conflicts** | `--merge --mark-conflicts` | Writes conflict markers to files for manual resolution (no commit) |
+
+#### Default Detect Mode
+
+By default, cherry-go only detects and reports conflicts without making any changes:
+
+1. If no local changes: files are copied directly (safe operation)
+2. If local changes exist: shows diff and reports conflict
+3. User decides how to proceed (merge, force, or manual)
+
+```bash
+cherry-go sync mylib
+# Output:
+#   ⚠️ Local changes detected in utils/helper.go
+#   [Shows diff]
+#   
+#   Choose how to proceed:
+#     1. MERGE: cherry-go sync mylib --merge
+#     2. FORCE: cherry-go sync mylib --force
+```
+
+#### Merge Mode
+
+When `--merge` is used, cherry-go attempts automatic merging while **preserving local changes**:
+
+1. Local additions are kept
+2. Remote modifications are applied
+3. If both modified the same lines differently → conflict
+
+```bash
+cherry-go sync mylib --merge
+# Output:
+#   ✓ Merged utils/helper.go (local changes preserved)
+#   ⚠️ Merge conflicts in config/settings.go - cannot auto-merge
+#   💡 Use --branch-on-conflict to create a branch for manual resolution
+```
+
+#### Mark Conflicts Mode
+
+When `--merge --mark-conflicts` is used, cherry-go writes conflict markers to files for manual resolution:
+
+1. Attempts automatic merge first
+2. If conflicts occur, writes standard git conflict markers to files
+3. Does NOT commit - leaves files staged for manual editing
+4. User resolves conflicts and commits manually
+
+```bash
+cherry-go sync mylib --merge --mark-conflicts
+# Output:
+#   ✓ Merged utils/helper.go (local changes preserved)
+#   ⚠️ Conflict markers written to config/settings.go - resolve manually and commit
+#
+# File contains:
+#   <<<<<<< LOCAL
+#   local content
+#   ||||||| BASE
+#   original content
+#   =======
+#   remote content
+#   >>>>>>> REMOTE
+```
+
+If merge conflicts occur, cherry-go suggests using `--branch-on-conflict` for manual resolution.
+
+#### Branch on Conflict Mode
+
+When `--merge --branch-on-conflict` is used, cherry-go creates a separate git branch with the remote changes if merge conflicts are detected:
+
+```bash
+cherry-go sync mylib --merge --branch-on-conflict
+# Output:
+#   ✓ Merged utils/helper.go successfully  
+#   ✗ Conflict in config/settings.go
+#   Creating branch 'cherry-go/sync/mylib-20241212-120000'...
+#
+#   To resolve conflicts:
+#   1. git merge cherry-go/sync/mylib-20241212-120000
+#   2. Resolve conflicts in marked files
+#   3. git add <resolved-files>
+#   4. git commit
+```
+
+### Cleaning Up Conflict Branches
+
+When using `--branch-on-conflict`, cherry-go creates branches with the prefix configured in your `.cherry-go.yaml` (default: `cherry-go/sync/`). After resolving conflicts, you can clean up these branches:
+
+```bash
+# List all conflict branches
+cherry-go cleanup
+# Output:
+#   Found 2 conflict branch(es):
+#     1. cherry-go/sync/mylib-20241212-120000
+#     2. cherry-go/sync/utils-20241213-143000
+#   
+#   To delete all conflict branches, run:
+#     cherry-go cleanup --all
+
+# Delete all conflict branches
+cherry-go cleanup --all
+# Output:
+#   ✅ Successfully deleted 2 conflict branch(es)
+#     ✓ cherry-go/sync/mylib-20241212-120000
+#     ✓ cherry-go/sync/utils-20241213-143000
+
+# Dry run to preview what would be deleted
+cherry-go cleanup --all --dry-run
+```
+
+**Best practice workflow:**
+1. Sync with `--merge --branch-on-conflict`
+2. Resolve conflicts by merging the created branch
+3. Test your changes
+4. Clean up conflict branches with `cherry-go cleanup --all`
 
 ## Authentication
 
@@ -512,7 +650,27 @@ GITHUB_TOKEN=xxx make docker-run-token ARGS="sync myrepo"
 
 ### Common Issues
 
-#### 1. Authentication Errors
+#### 1. Merge Conflicts
+
+When cherry-go detects local modifications that conflict with remote changes:
+
+```bash
+# Option 1: Force overwrite local changes
+cherry-go sync mylib --force
+
+# Option 2: Create branch for manual resolution
+cherry-go sync mylib --branch-on-conflict
+# Then: git merge cherry-go/sync/mylib-<timestamp>
+
+# Option 3: Manually resolve before sync
+# 1. Backup your local changes
+# 2. Run sync with --force
+# 3. Manually re-apply your changes
+```
+
+**Note**: The first time you sync a source, cherry-go saves a snapshot of the synced content. This enables three-way merge on subsequent syncs. If no snapshot exists (first sync or cleared cache), cherry-go falls back to hash-based conflict detection.
+
+#### 2. Authentication Errors
 
 ```bash
 # Check if token has correct permissions
@@ -522,7 +680,7 @@ curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/user
 ssh-add -l
 ```
 
-#### 2. Path Not Found
+#### 3. Path Not Found
 
 ```bash
 # Use dry-run to debug
@@ -532,7 +690,7 @@ cherry-go sync --all --dry-run --verbose
 git ls-tree -r HEAD --name-only | grep "your-path"
 ```
 
-#### 3. Permission Issues
+#### 4. Permission Issues
 
 ```bash
 # Check directory permissions
@@ -563,14 +721,32 @@ cherry-go status
 If you need to start fresh:
 
 ```bash
-# Remove cherry-go cache
+# Remove cherry-go local cache
 rm -rf .cherry-go/
 
 # Reset configuration
 rm .cherry-go.yaml
 
+# Clear global cache (repositories and base content for merge)
+rm -rf ~/.cache/cherry-go/
+
 # Start over
 cherry-go add --name "new-source" ...
+```
+
+### Cache Management
+
+Cherry-go maintains two types of cache:
+
+1. **Repository cache** (`~/.cache/cherry-go/repos/`): Cloned repositories
+2. **Base content cache** (`~/.cache/cherry-go/base-content/`): Snapshots for three-way merge
+
+```bash
+# View cache status
+cherry-go cache status
+
+# Clean old cached repositories
+cherry-go cache clean
 ```
 
 ## Best Practices

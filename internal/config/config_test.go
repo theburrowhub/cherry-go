@@ -100,7 +100,7 @@ func TestSaveAndLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	configPath := filepath.Join(tmpDir, "test-config.yaml")
 
@@ -126,8 +126,8 @@ func TestSaveAndLoad(t *testing.T) {
 	cfg.AddSource(source)
 
 	// Save configuration
-	if err := cfg.Save(configPath); err != nil {
-		t.Fatalf("Failed to save config: %v", err)
+	if saveErr := cfg.Save(configPath); saveErr != nil {
+		t.Fatalf("Failed to save config: %v", saveErr)
 	}
 
 	// Load configuration

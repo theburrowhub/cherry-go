@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	logger  *slog.Logger
-	dryRun  bool
-	verbose bool
+	logger         *slog.Logger
+	dryRun         bool
+	verbose        bool
+	verbosityLevel int // 0 = normal, 1 = verbose, 2+ = very verbose (shows diffs)
 )
 
 // CustomHandler implements a custom slog.Handler with TIMESTAMP [SEVERITY] MSG format
@@ -110,22 +111,36 @@ func Init() {
 	slog.SetDefault(logger)
 }
 
-// SetVerbose enables or disables verbose mode
-func SetVerbose(enabled bool) {
-	verbose = enabled
-
-	// Update logger level based on verbose mode
-	var level slog.Level
-	if verbose {
-		level = slog.LevelDebug
+// SetVerbosityLevel sets the verbosity level (0=normal, 1=verbose, 2+=very verbose with diffs)
+func SetVerbosityLevel(level int) {
+	verbosityLevel = level
+	if level > 0 {
+		verbose = true
+		var slogLevel slog.Level
+		if level >= 2 {
+			slogLevel = slog.LevelDebug
+		} else {
+			slogLevel = slog.LevelDebug
+		}
+		handler := NewCustomHandler(os.Stdout, slogLevel)
+		logger = slog.New(handler)
+		slog.SetDefault(logger)
 	} else {
-		level = slog.LevelInfo
+		verbose = false
+		handler := NewCustomHandler(os.Stdout, slog.LevelInfo)
+		logger = slog.New(handler)
+		slog.SetDefault(logger)
 	}
+}
 
-	// Create new custom handler with updated level
-	handler := NewCustomHandler(os.Stdout, level)
-	logger = slog.New(handler)
-	slog.SetDefault(logger)
+// GetVerbosityLevel returns the current verbosity level
+func GetVerbosityLevel() int {
+	return verbosityLevel
+}
+
+// ShouldShowDiffs returns true if diffs should be shown (verbosity >= 2)
+func ShouldShowDiffs() bool {
+	return verbosityLevel >= 2
 }
 
 // SetDryRun enables or disables dry run mode

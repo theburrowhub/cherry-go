@@ -39,90 +39,6 @@ func NewSelector() (*Selector, error) {
 	return &Selector{fzf: f}, nil
 }
 
-// SelectFiles presents an interactive file selector and returns selected file paths
-func (s *Selector) SelectFiles(files []string, prompt string) ([]string, error) {
-	if len(files) == 0 {
-		return []string{}, nil
-	}
-
-	// Sort files for better presentation
-	sort.Strings(files)
-
-	// Create file items
-	items := make([]FileItem, len(files))
-	for i, file := range files {
-		items[i] = FileItem{
-			Path:  file,
-			IsDir: false,
-		}
-	}
-
-	// Note: go-fzf doesn't support dynamic prompts in this version
-	// We'll display the prompt as a message instead
-	if prompt != "" {
-		fmt.Printf("\n%s\n", prompt)
-		fmt.Println("Use arrow keys to navigate, Space to select, Enter to confirm, Ctrl+C to cancel")
-	}
-
-	// Run the selector
-	indices, err := s.fzf.Find(items, func(i int) string {
-		return items[i].String()
-	})
-	if err != nil {
-		return nil, fmt.Errorf("selection cancelled or failed: %w", err)
-	}
-
-	// Extract selected file paths
-	selected := make([]string, len(indices))
-	for i, idx := range indices {
-		selected[i] = items[idx].Path
-	}
-
-	return selected, nil
-}
-
-// SelectDirectories presents an interactive directory selector and returns selected directory paths
-func (s *Selector) SelectDirectories(directories []string, prompt string) ([]string, error) {
-	if len(directories) == 0 {
-		return []string{}, nil
-	}
-
-	// Sort directories for better presentation
-	sort.Strings(directories)
-
-	// Create directory items
-	items := make([]FileItem, len(directories))
-	for i, dir := range directories {
-		items[i] = FileItem{
-			Path:  dir,
-			IsDir: true,
-		}
-	}
-
-	// Note: go-fzf doesn't support dynamic prompts in this version
-	// We'll display the prompt as a message instead
-	if prompt != "" {
-		fmt.Printf("\n%s\n", prompt)
-		fmt.Println("Use arrow keys to navigate, Space to select, Enter to confirm, Ctrl+C to cancel")
-	}
-
-	// Run the selector
-	indices, err := s.fzf.Find(items, func(i int) string {
-		return items[i].String()
-	})
-	if err != nil {
-		return nil, fmt.Errorf("selection cancelled or failed: %w", err)
-	}
-
-	// Extract selected directory paths
-	selected := make([]string, len(indices))
-	for i, idx := range indices {
-		selected[i] = items[idx].Path
-	}
-
-	return selected, nil
-}
-
 // SelectMixed presents an interactive selector for both files and directories
 func (s *Selector) SelectMixed(files []string, directories []string, prompt string) (selectedFiles []string, selectedDirs []string, err error) {
 	if len(files) == 0 && len(directories) == 0 {
@@ -206,7 +122,7 @@ func ConfigurePaths(items []string, itemType string, defaultBranch string) ([]Pa
 		// Local path configuration
 		fmt.Printf("Local path [%s]: ", item)
 		var localPath string
-		fmt.Scanln(&localPath)
+		_, _ = fmt.Scanln(&localPath)
 		if strings.TrimSpace(localPath) == "" {
 			localPath = item
 		}
@@ -214,7 +130,7 @@ func ConfigurePaths(items []string, itemType string, defaultBranch string) ([]Pa
 		// Branch configuration
 		fmt.Printf("Branch [%s]: ", defaultBranch)
 		var branch string
-		fmt.Scanln(&branch)
+		_, _ = fmt.Scanln(&branch)
 		if strings.TrimSpace(branch) == "" {
 			branch = defaultBranch
 		}
@@ -242,7 +158,7 @@ func AskYesNo(question string, defaultYes bool) bool {
 
 	fmt.Printf("%s [%s]: ", question, defaultStr)
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 
 	response = strings.TrimSpace(strings.ToLower(response))
 

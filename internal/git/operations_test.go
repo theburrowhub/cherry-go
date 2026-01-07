@@ -1,11 +1,12 @@
 package git
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
 )
 
 func TestShouldExclude(t *testing.T) {
@@ -66,7 +67,7 @@ func TestCopyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create source file
 	srcPath := filepath.Join(tmpDir, "source.txt")
@@ -77,8 +78,8 @@ func TestCopyFile(t *testing.T) {
 
 	// Copy file
 	dstPath := filepath.Join(tmpDir, "subdir", "dest.txt")
-	if err := copyFile(srcPath, dstPath); err != nil {
-		t.Fatalf("Failed to copy file: %v", err)
+	if copyErr := copyFile(srcPath, dstPath); copyErr != nil {
+		t.Fatalf("Failed to copy file: %v", copyErr)
 	}
 
 	// Verify destination file
@@ -100,7 +101,7 @@ func TestCopyDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create source directory structure
 	srcDir := filepath.Join(tmpDir, "src")

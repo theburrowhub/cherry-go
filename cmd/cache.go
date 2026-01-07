@@ -1,11 +1,12 @@
 package cmd
 
 import (
-	"cherry-go/internal/cache"
-	"cherry-go/internal/logger"
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/cache"
+	"cherry-go/internal/logger"
 )
 
 // cacheCmd represents the cache command
@@ -20,10 +21,10 @@ repository downloads.
 Available subcommands:
   list  - List cached repositories
   clean - Clean old cached repositories
-  info  - Show cache information`,
+	info  - Show cache information`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Show help when cache is called without subcommands
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 

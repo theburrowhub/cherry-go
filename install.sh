@@ -228,8 +228,8 @@ backup_existing() {
         return 0
     fi
     
-    print_info "No existing installation found"
-    return 1
+    print_info "No existing installation found. No backup needed. Continuing..."
+    return 0
 }
 
 verify_installation() {

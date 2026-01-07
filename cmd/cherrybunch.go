@@ -2,15 +2,16 @@ package cmd
 
 import (
 	"bufio"
-	"cherry-go/internal/config"
-	"cherry-go/internal/git"
-	"cherry-go/internal/interactive"
-	"cherry-go/internal/logger"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/git"
+	"cherry-go/internal/interactive"
+	"cherry-go/internal/logger"
 )
 
 var (
@@ -27,7 +28,7 @@ var cherryBunchCmd = &cobra.Command{
 Cherry bunches are YAML template files that describe sets of files and directories
 to synchronize from repositories. This command helps create and manage these templates.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		_ = cmd.Help()
 	},
 }
 

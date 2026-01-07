@@ -23,7 +23,7 @@ func (fh *FileHasher) HashFile(filePath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open file %s: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
@@ -31,6 +31,13 @@ func (fh *FileHasher) HashFile(filePath string) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
+
+// HashBytes calculates SHA256 hash of byte content
+func (fh *FileHasher) HashBytes(content []byte) string {
+	hasher := sha256.New()
+	hasher.Write(content)
+	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 // HashDirectory calculates hashes for all files in a directory

@@ -1,19 +1,18 @@
 package cmd
 
 import (
-	"cherry-go/internal/config"
-	"cherry-go/internal/logger"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"cherry-go/internal/config"
+	"cherry-go/internal/logger"
 )
 
 var (
-	cherryBunchURL  string
-	cherryBunchFile string
 	cherryBunchName string
 )
 
@@ -103,7 +102,7 @@ func loadCherryBunchFromURL(url string) (*config.CherryBunch, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to download cherry bunch: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download cherry bunch: HTTP %d", resp.StatusCode)
