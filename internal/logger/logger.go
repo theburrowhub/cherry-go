@@ -42,10 +42,10 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 	// Format: TIMESTAMP [SEVERITY] MSG
 	timestamp := r.Time.Format("2006/01/02 15:04:05")
 	severity := levelString(r.Level)
-	
+
 	// Build the message
 	msg := fmt.Sprintf("%s [%s] %s", timestamp, severity, r.Message)
-	
+
 	// Add source info in verbose mode
 	if verbose && r.PC != 0 {
 		// Get source file info from PC
@@ -58,9 +58,9 @@ func (h *CustomHandler) Handle(_ context.Context, r slog.Record) error {
 			msg += fmt.Sprintf(" (%s:%d)", filename, frame.Line)
 		}
 	}
-	
+
 	msg += "\n"
-	
+
 	_, err := h.writer.Write([]byte(msg))
 	return err
 }
@@ -70,7 +70,7 @@ func (h *CustomHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	newAttrs := make([]slog.Attr, len(h.attrs)+len(attrs))
 	copy(newAttrs, h.attrs)
 	copy(newAttrs[len(h.attrs):], attrs)
-	
+
 	return &CustomHandler{
 		writer: h.writer,
 		level:  h.level,
@@ -105,7 +105,7 @@ func Init() {
 	// Create custom handler with TIMESTAMP [SEVERITY] MSG format
 	handler := NewCustomHandler(os.Stdout, slog.LevelInfo)
 	logger = slog.New(handler)
-	
+
 	// Set as default logger
 	slog.SetDefault(logger)
 }
@@ -113,7 +113,7 @@ func Init() {
 // SetVerbose enables or disables verbose mode
 func SetVerbose(enabled bool) {
 	verbose = enabled
-	
+
 	// Update logger level based on verbose mode
 	var level slog.Level
 	if verbose {
@@ -121,7 +121,7 @@ func SetVerbose(enabled bool) {
 	} else {
 		level = slog.LevelInfo
 	}
-	
+
 	// Create new custom handler with updated level
 	handler := NewCustomHandler(os.Stdout, level)
 	logger = slog.New(handler)
@@ -167,17 +167,17 @@ func Error(format string, v ...interface{}) {
 	} else {
 		level = slog.LevelError
 	}
-	
+
 	errorHandler := NewCustomHandler(os.Stderr, level)
 	errorLogger := slog.New(errorHandler)
-	
+
 	var message string
 	if len(v) == 0 {
 		message = format
 	} else {
 		message = fmt.Sprintf(format, v...)
 	}
-	
+
 	errorLogger.Error(message)
 }
 
@@ -190,7 +190,7 @@ func ErrorContext(msg string, args ...any) {
 	} else {
 		level = slog.LevelError
 	}
-	
+
 	errorHandler := NewCustomHandler(os.Stderr, level)
 	errorLogger := slog.New(errorHandler)
 	errorLogger.Error(msg, args...)
@@ -204,7 +204,7 @@ func Warning(format string, v ...interface{}) {
 	} else {
 		message = fmt.Sprintf(format, v...)
 	}
-	
+
 	logger.Warn(message)
 }
 

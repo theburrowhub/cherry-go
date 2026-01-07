@@ -35,7 +35,7 @@ Features:
 		// Configure logger based on flags
 		logger.SetVerbose(verbose)
 		logger.SetDryRun(dryRun)
-		
+
 		if verbose {
 			logger.Debug("Verbose mode enabled")
 		}

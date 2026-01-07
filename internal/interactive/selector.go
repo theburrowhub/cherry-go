@@ -194,7 +194,7 @@ type PathConfig struct {
 // ConfigurePaths asks the user to configure custom paths for selected items
 func ConfigurePaths(items []string, itemType string, defaultBranch string) ([]PathConfig, error) {
 	configs := make([]PathConfig, len(items))
-	
+
 	fmt.Printf("\n=== Path configuration for %s ===\n", itemType)
 	fmt.Println("Press Enter to use the same source path as destination.")
 	fmt.Println("Press Enter to use the default branch.")
@@ -202,7 +202,7 @@ func ConfigurePaths(items []string, itemType string, defaultBranch string) ([]Pa
 
 	for i, item := range items {
 		fmt.Printf("Configuring: %s\n", item)
-		
+
 		// Local path configuration
 		fmt.Printf("Local path [%s]: ", item)
 		var localPath string
@@ -245,7 +245,7 @@ func AskYesNo(question string, defaultYes bool) bool {
 	fmt.Scanln(&response)
 
 	response = strings.TrimSpace(strings.ToLower(response))
-	
+
 	if response == "" {
 		return defaultYes
 	}
@@ -256,44 +256,44 @@ func AskYesNo(question string, defaultYes bool) bool {
 // FilterGitFiles filters out common Git-related files and directories that shouldn't be included
 func FilterGitFiles(files []string) []string {
 	filtered := make([]string, 0, len(files))
-	
+
 	for _, file := range files {
 		// Skip .git directory and its contents
 		if strings.HasPrefix(file, ".git/") || file == ".git" {
 			continue
 		}
-		
+
 		// Skip common temporary and build files
 		base := filepath.Base(file)
 		if strings.HasPrefix(base, ".") && (base == ".DS_Store" || base == ".gitkeep") {
 			continue
 		}
-		
+
 		filtered = append(filtered, file)
 	}
-	
+
 	return filtered
 }
 
 // FilterGitDirectories filters out common Git-related directories that shouldn't be included
 func FilterGitDirectories(directories []string) []string {
 	filtered := make([]string, 0, len(directories))
-	
+
 	for _, dir := range directories {
 		// Skip .git directory
 		if dir == ".git" || strings.HasPrefix(dir, ".git/") {
 			continue
 		}
-		
+
 		// Skip common build and cache directories
 		base := filepath.Base(dir)
-		if base == "node_modules" || base == ".vscode" || base == ".idea" || 
-		   base == "dist" || base == "build" || base == "target" {
+		if base == "node_modules" || base == ".vscode" || base == ".idea" ||
+			base == "dist" || base == "build" || base == "target" {
 			continue
 		}
-		
+
 		filtered = append(filtered, dir)
 	}
-	
+
 	return filtered
 }
