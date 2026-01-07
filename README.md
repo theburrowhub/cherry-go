@@ -69,6 +69,7 @@ The installation script automatically detects your platform and downloads the ap
 
 - **Linux**: amd64, arm64
 - **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+- **Windows**: amd64
 
 ### Requirements
 
@@ -101,7 +102,7 @@ cp cherry-go ~/.local/bin/
 ### Using Go Install
 
 ```bash
-go install cherry-go@latest
+go install github.com/theburrowhub/cherry-go@latest
 ```
 
 ### Uninstallation
@@ -117,13 +118,38 @@ go install cherry-go@latest
 make uninstall
 ```
 
+### Verify Checksums
+
+Each release includes SHA256 checksums to verify binary integrity:
+
+```bash
+# Download binary and checksums
+curl -LO https://github.com/theburrowhub/cherry-go/releases/latest/download/cherry-go-linux-amd64.tar.gz
+curl -LO https://github.com/theburrowhub/cherry-go/releases/latest/download/cherry-go-checksums.txt
+
+# Verify checksum (Linux/macOS)
+sha256sum -c cherry-go-checksums.txt --ignore-missing
+
+# On macOS, you may need to use shasum instead
+shasum -a 256 -c cherry-go-checksums.txt --ignore-missing
+```
+
 ### Docker Installation
 
 Cherry-go is also available as a Docker image, which is useful for CI/CD pipelines or if you prefer containerized tools.
 
+> **Prerequisites**: [Docker](https://docs.docker.com/get-docker/) must be installed on your system.
+
+**Available tags:**
+- `latest` - Latest stable release
+- `vX.Y.Z` - Specific version (e.g., `v0.2.0`)
+
 ```bash
-# Run directly with Docker
+# Run directly with Docker (latest version)
 docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest status
+
+# Run specific version
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:v0.2.0 status
 
 # Sync all sources
 docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync --all
