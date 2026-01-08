@@ -20,7 +20,22 @@ A command-line tool for partial versioning of files from other Git repositories.
 
 Cherry-go provides an intelligent installation script that automatically detects whether you're installing from a local repository or downloading from GitHub releases.
 
-### Remote Installation (Recommended)
+### Homebrew (macOS/Linux)
+
+Install cherry-go using [Homebrew](https://brew.sh/):
+
+```bash
+brew tap theburrowhub/tap
+brew install theburrowhub/tap/cherry-go
+```
+
+Or in a single command:
+
+```bash
+brew install theburrowhub/tap/cherry-go
+```
+
+### Remote Installation
 
 Install the latest release directly from GitHub:
 
@@ -108,6 +123,10 @@ go install github.com/theburrowhub/cherry-go@latest
 ### Uninstallation
 
 ```bash
+# Using Homebrew
+brew uninstall cherry-go
+brew untap theburrowhub/tap  # Optional: remove the tap
+
 # Remove local installation
 ./scripts/uninstall.sh
 

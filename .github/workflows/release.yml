@@ -123,3 +123,11 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew tap
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          repository: theburrowhub/homebrew-tap
+          event-type: update-formula
+          client-payload: '{"formula": "cherry-go", "version": "${{ needs.version-bump.outputs.new_tag }}"}'
