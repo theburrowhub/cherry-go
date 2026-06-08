@@ -10,11 +10,11 @@ import (
 
 	"cherry-go/internal/config"
 	"cherry-go/internal/git"
+	"cherry-go/internal/interactive"
 	"cherry-go/internal/logger"
 )
 
 var (
-	syncAll            bool
 	forceSync          bool
 	mergeSync          bool
 	branchOnConflict   bool
@@ -26,8 +26,11 @@ var (
 var syncCmd = &cobra.Command{
 	Use:   "sync [source-name]",
 	Short: "Synchronize files from tracked repositories",
-	Long: `Synchronize files from one or all tracked source repositories.
+	Long: `Synchronize files from tracked source repositories.
 This will pull the latest changes and update local files accordingly.
+
+If no source name is provided, all configured sources will be synchronized
+(with a confirmation prompt when running interactively).
 
 By default, cherry-go will detect and report conflicts WITHOUT making changes.
 This allows you to review what would change before deciding how to proceed.
@@ -35,35 +38,30 @@ This allows you to review what would change before deciding how to proceed.
 Use --merge to attempt automatic merging, or --force to overwrite local changes.
 
 Examples:
-  # Check for updates and conflicts (default - no changes made)
-  cherry-go sync --all
-  
+  # Check all sources for updates and conflicts (default - no changes made)
+  cherry-go sync
+
+  # Sync a specific source
+  cherry-go sync mylib
+
   # Sync with automatic merge
-  cherry-go sync --all --merge
-  
+  cherry-go sync --merge
+
   # Force sync (override local changes)
-  cherry-go sync --all --force
-  
+  cherry-go sync --force
+
   # Merge with branch creation on conflict
-  cherry-go sync --all --merge --branch-on-conflict
-  
+  cherry-go sync --merge --branch-on-conflict
+
   # Merge with conflict markers for manual resolution
-  cherry-go sync --all --merge --mark-conflicts
-  
+  cherry-go sync --merge --mark-conflicts
+
   # Dry run to preview changes
-  cherry-go sync --all --dry-run`,
+  cherry-go sync --dry-run`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var sourceName string
 		if len(args) > 0 {
 			sourceName = args[0]
-		}
-
-		if !syncAll && sourceName == "" {
-			logger.Fatal("Either specify a source name or use --all flag")
-		}
-
-		if syncAll && sourceName != "" {
-			logger.Fatal("Cannot specify both --all and a source name")
 		}
 
 		if forceSync && mergeSync {
@@ -94,8 +92,9 @@ Examples:
 		// Determine sync mode
 		mode := getSyncMode()
 
-		if syncAll {
-			syncAllSources(workDir, mode)
+		if sourceName == "" {
+			// No source specified: sync all sources (with confirmation when interactive)
+			syncAllSourcesWithConfirmation(workDir, mode)
 		} else {
 			syncSingleSource(sourceName, workDir, mode)
 		}
@@ -117,6 +116,35 @@ func getSyncMode() git.SyncMode {
 		return git.SyncModeMerge
 	}
 	return git.SyncModeDetect // Default: only detect conflicts, don't make changes
+}
+
+// syncAllSourcesWithConfirmation lists the sources that will be synchronized and,
+// when running interactively, asks the user to confirm before proceeding.
+func syncAllSourcesWithConfirmation(workDir string, mode git.SyncMode) {
+	if len(cfg.Sources) == 0 {
+		logger.Info("No sources configured to sync")
+		return
+	}
+
+	// Show what will be synced
+	logger.Info("The following %d source(s) will be synchronized:", len(cfg.Sources))
+	for i, source := range cfg.Sources {
+		logger.Info("  %d. %s (%s) - %d path(s)", i+1, source.Name, source.Repository, len(source.Paths))
+	}
+	logger.Info("")
+
+	// Ask for confirmation in interactive mode
+	if interactive.ShouldPrompt() && !logger.IsDryRun() {
+		if !interactive.Confirm("Do you want to proceed with synchronization?") {
+			logger.Info("Synchronization cancelled by user")
+			return
+		}
+		logger.Info("")
+	} else if !interactive.ShouldPrompt() {
+		logger.Info("Non-interactive mode detected, proceeding automatically...")
+	}
+
+	syncAllSources(workDir, mode)
 }
 
 func syncAllSources(workDir string, mode git.SyncMode) {
@@ -397,7 +425,6 @@ func printConflictResolutionInstructions(results []git.SyncResult) {
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
-	syncCmd.Flags().BoolVar(&syncAll, "all", false, "sync all configured sources")
 	syncCmd.Flags().BoolVar(&mergeSync, "merge", false, "attempt to merge remote changes with local modifications")
 	syncCmd.Flags().BoolVar(&forceSync, "force", false, "force sync and override local changes")
 	syncCmd.Flags().BoolVar(&branchOnConflict, "branch-on-conflict", false,
