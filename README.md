@@ -171,7 +171,7 @@ docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sta
 docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:v0.2.0 status
 
 # Sync all sources
-docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync --all
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync
 ```
 
 **Using an alias (recommended for daily use)**:
@@ -194,7 +194,7 @@ After adding the alias and reloading your shell (`source ~/.bashrc` or `source ~
 ```bash
 cherry-go init
 cherry-go add file https://github.com/user/repo.git/src/main.go
-cherry-go sync --all
+cherry-go sync
 ```
 
 > **Note**: The Docker image does not have access to the SSH agent. For private repositories, either mount your SSH keys or use token-based authentication.
@@ -451,39 +451,39 @@ Sync files from tracked repositories. Cherry-go supports multiple synchronizatio
 
 ```bash
 # Check for updates (default - detects conflicts without making changes)
-cherry-go sync --all
+cherry-go sync
 
 # Sync specific source
 cherry-go sync SOURCE_NAME
 
 # Dry run (preview changes without making them)
-cherry-go sync --all --dry-run
+cherry-go sync --dry-run
 ```
 
 **Sync with conflict resolution:**
 
 ```bash
 # Merge mode - attempts automatic merge preserving local changes
-cherry-go sync --all --merge
+cherry-go sync --merge
 
 # Force mode - override all local changes
-cherry-go sync --all --force
+cherry-go sync --force
 
 # Branch on conflict - creates a git branch for manual resolution
-cherry-go sync --all --merge --branch-on-conflict
+cherry-go sync --merge --branch-on-conflict
 
 # Mark conflicts - writes conflict markers (<<<<<<, ======, >>>>>>) to files
-cherry-go sync --all --merge --mark-conflicts
+cherry-go sync --merge --mark-conflicts
 ```
 
 **Override auto-commit for a single execution:**
 
 ```bash
 # Force a commit even if options.auto_commit is false
-cherry-go sync --all --autocommit=true
+cherry-go sync --autocommit=true
 
 # Skip the commit even if options.auto_commit is true
-cherry-go sync --all --autocommit=false
+cherry-go sync --autocommit=false
 ```
 
 **When to use each mode:**
@@ -746,17 +746,17 @@ Cherry-go automatically tracks file hashes to detect when local files have been 
 
 ```bash
 # If local files have been modified
-cherry-go sync --all
+cherry-go sync
 # ⚠️  Conflicts detected in mylib:
 #   - Modified: src/utils.go (expected: abcd1234, actual: 5678efgh)
 # Sync aborted due to conflicts. Use --force to override or resolve manually.
 
 # Force sync to override local changes
-cherry-go sync --all --force
+cherry-go sync --force
 # 🔧 Force mode: Overriding local changes in mylib
 
 # Dry run to see what would happen
-cherry-go sync --all --dry-run
+cherry-go sync --dry-run
 # Shows conflicts without making changes
 ```
 
@@ -803,7 +803,7 @@ Cherry-go can be integrated into CI/CD pipelines:
 # GitHub Actions example
 - name: Sync external dependencies
   run: |
-    cherry-go sync --all
+    cherry-go sync
     if git diff --quiet; then
       echo "No changes"
     else
@@ -832,7 +832,7 @@ go test ./...
 Test operations without making changes:
 
 ```bash
-cherry-go sync --all --dry-run --verbose
+cherry-go sync --dry-run --verbose
 ```
 
 ## Contributing

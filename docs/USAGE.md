@@ -38,25 +38,25 @@ cherry-go status
 
 ```bash
 # Check for updates (default - detects conflicts without making changes)
-cherry-go sync --all
+cherry-go sync
 
 # Sync with automatic merge
-cherry-go sync --all --merge
+cherry-go sync --merge
 
 # Sync specific source
 cherry-go sync awesome-go-utils --merge
 
 # Dry run to see what would happen
-cherry-go sync --all --dry-run
+cherry-go sync --dry-run
 
 # Force sync (overwrite local changes)
-cherry-go sync --all --force
+cherry-go sync --force
 
 # Merge with branch creation on conflict
-cherry-go sync --all --merge --branch-on-conflict
+cherry-go sync --merge --branch-on-conflict
 
 # Merge with conflict markers for manual resolution
-cherry-go sync --all --merge --mark-conflicts
+cherry-go sync --merge --mark-conflicts
 ```
 
 ### Sync Modes
@@ -355,7 +355,7 @@ jobs:
     - name: Sync dependencies
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: cherry-go sync --all
+      run: cherry-go sync
     
     - name: Create PR if changes
       uses: peter-evans/create-pull-request@v5
@@ -374,7 +374,7 @@ sync-dependencies:
   image: golang:1.21
   script:
     - go install github.com/your-username/cherry-go@latest
-    - cherry-go sync --all
+    - cherry-go sync
     - |
       if git diff --quiet; then
         echo "No changes"
@@ -403,7 +403,7 @@ pipeline {
         stage('Sync Dependencies') {
             steps {
                 sh 'go install github.com/your-username/cherry-go@latest'
-                sh 'cherry-go sync --all'
+                sh 'cherry-go sync'
                 
                 script {
                     def changes = sh(
@@ -458,7 +458,7 @@ docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sta
 docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest init
 
 # Sync all sources
-docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync --all
+docker run --rm -v "$(pwd)":/workspace ghcr.io/theburrowhub/cherry-go:latest sync
 ```
 
 ### Setting Up Shell Aliases
@@ -520,7 +520,7 @@ Pass environment variables to the container:
 docker run --rm \
   -v "$(pwd)":/workspace \
   -e GITHUB_TOKEN="ghp_xxxxxxxxxxxx" \
-  ghcr.io/theburrowhub/cherry-go:latest sync --all
+  ghcr.io/theburrowhub/cherry-go:latest sync
 
 # Multiple tokens
 docker run --rm \
@@ -528,7 +528,7 @@ docker run --rm \
   -e GITHUB_TOKEN \
   -e GITLAB_TOKEN \
   -e GIT_TOKEN \
-  ghcr.io/theburrowhub/cherry-go:latest sync --all
+  ghcr.io/theburrowhub/cherry-go:latest sync
 ```
 
 #### Using SSH Keys
@@ -539,7 +539,7 @@ Mount your SSH directory as read-only:
 docker run --rm \
   -v "$(pwd)":/workspace \
   -v "$HOME/.ssh":/root/.ssh:ro \
-  ghcr.io/theburrowhub/cherry-go:latest sync --all
+  ghcr.io/theburrowhub/cherry-go:latest sync
 ```
 
 **Important limitations with SSH in Docker:**
@@ -572,7 +572,7 @@ jobs:
       - name: Sync dependencies
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: cherry-go sync --all
+        run: cherry-go sync
       
       - name: Check for changes
         run: |
@@ -590,7 +590,7 @@ sync-dependencies:
   stage: sync
   image: ghcr.io/theburrowhub/cherry-go:latest
   script:
-    - cherry-go sync --all
+    - cherry-go sync
     - |
       if git diff --quiet; then
         echo "No changes"
@@ -684,7 +684,7 @@ ssh-add -l
 
 ```bash
 # Use dry-run to debug
-cherry-go sync --all --dry-run --verbose
+cherry-go sync --dry-run --verbose
 
 # Check if path exists in repository
 git ls-tree -r HEAD --name-only | grep "your-path"
@@ -705,7 +705,7 @@ git status
 Enable verbose logging:
 
 ```bash
-cherry-go sync --all --verbose --dry-run
+cherry-go sync --verbose --dry-run
 ```
 
 ### Configuration Validation
