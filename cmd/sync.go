@@ -14,11 +14,12 @@ import (
 )
 
 var (
-	syncAll          bool
-	forceSync        bool
-	mergeSync        bool
-	branchOnConflict bool
-	markConflicts    bool
+	syncAll            bool
+	forceSync          bool
+	mergeSync          bool
+	branchOnConflict   bool
+	markConflicts      bool
+	overrideAutocommit *bool // nil = not set; otherwise overrides config auto_commit for this execution
 )
 
 // syncCmd represents the sync command
@@ -289,9 +290,20 @@ func syncSource(source *config.Source, workDir string, mode git.SyncMode) git.Sy
 		}
 	}
 
+	// Determine auto-commit setting, allowing a per-execution override via --autocommit
+	autoCommit := cfg.Options.AutoCommit
+	if overrideAutocommit != nil {
+		autoCommit = *overrideAutocommit
+		if *overrideAutocommit {
+			logger.Info("🔧 Overriding autocommit: forcing commit for this execution")
+		} else {
+			logger.Info("🔧 Overriding autocommit: skipping commit for this execution")
+		}
+	}
+
 	// Create commit if auto-commit is enabled and there are changes
 	// BUT skip commit if using --mark-conflicts mode with conflicts (user needs to resolve manually)
-	shouldCommit := cfg.Options.AutoCommit && result.HasChanges && !logger.IsDryRun()
+	shouldCommit := autoCommit && result.HasChanges && !logger.IsDryRun()
 
 	// Don't commit if mark-conflicts mode and there are conflicts
 	if mode == git.SyncModeMarkConflicts && len(copyResult.Conflicts) > 0 {
@@ -392,4 +404,15 @@ func init() {
 		"with --merge, create a branch with remote changes when merge conflicts are detected")
 	syncCmd.Flags().BoolVar(&markConflicts, "mark-conflicts", false,
 		"with --merge, write conflict markers to files for manual resolution (no commit)")
+	syncCmd.Flags().Bool("autocommit", false,
+		"override auto_commit config for this execution (true=force commit, false=skip commit)")
+
+	// Capture the autocommit flag only when explicitly provided, so we can
+	// distinguish between "not set" and "set to false".
+	syncCmd.PreRun = func(cmd *cobra.Command, args []string) {
+		if cmd.Flags().Changed("autocommit") {
+			value, _ := cmd.Flags().GetBool("autocommit")
+			overrideAutocommit = &value
+		}
+	}
 }

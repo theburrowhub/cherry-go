@@ -476,6 +476,16 @@ cherry-go sync --all --merge --branch-on-conflict
 cherry-go sync --all --merge --mark-conflicts
 ```
 
+**Override auto-commit for a single execution:**
+
+```bash
+# Force a commit even if options.auto_commit is false
+cherry-go sync --all --autocommit=true
+
+# Skip the commit even if options.auto_commit is true
+cherry-go sync --all --autocommit=false
+```
+
 **When to use each mode:**
 - **Detect**: Safe default, shows what would change
 - **Merge**: When you have local changes you want to preserve
